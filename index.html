@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLPED · OC · Stock — Mantenimiento</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#f5f6f8; --card:#fff; --ink:#1d2330; --ink2:#5b6475; --line:#e3e6ec; --soft:#f0f2f6;
+  --brand:#3b2a6b; --brand2:#6a4fb3; --accent:#2f6fde;
+  --good:#1f8a4c; --warn:#c98a00; --bad:#c43c3c; --info:#2f6fde;
+  --r:12px; --sh:0 1px 2px rgba(20,24,40,.06),0 2px 8px rgba(20,24,40,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+button,select,input{font:inherit;color:inherit}
+header{background:var(--brand);color:#fff;padding:14px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+header .sub{font-size:12px;opacity:.8}
+header .sp{flex:1}
+.hbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+.hbtn:hover{background:rgba(255,255,255,.22)}
+nav{display:flex;gap:4px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;padding:12px 14px;cursor:pointer;color:var(--ink2);border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--brand);border-bottom-color:var(--brand2);font-weight:600}
+.filters{display:flex;flex-wrap:wrap;gap:10px;padding:12px 24px;background:#fff;border-bottom:1px solid var(--line);align-items:flex-end}
+.filters label{display:flex;flex-direction:column;font-size:11px;color:var(--ink2);gap:3px}
+.filters select,.filters input{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff;min-width:120px}
+.filters .clr{border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:6px 12px;cursor:pointer}
+main{padding:20px 24px 48px;max-width:1500px;margin:0 auto}
+.grid{display:grid;gap:14px}
+.k6{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.c2{grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.c3{grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:16px}
+.card h3{margin:0 0 2px;font-size:14px;font-weight:650}
+.card .note{font-size:12px;color:var(--ink2);margin:0 0 10px}
+.kpi{position:relative;padding:14px 16px 12px}
+.kpi .lbl{font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;gap:6px}
+.kpi .val{font-size:26px;font-weight:700;margin:4px 0 2px;letter-spacing:-.3px}
+.kpi .det{font-size:12px;color:var(--ink2)}
+.kpi .bar{position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 4px 4px 0;background:var(--line)}
+.kpi.good .bar{background:var(--good)} .kpi.warn .bar{background:var(--warn)} .kpi.bad .bar{background:var(--bad)}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--ink2);white-space:nowrap}
+.pill.good{background:#e5f4ec;color:var(--good)} .pill.warn{background:#fbf1d9;color:#9a6a00} .pill.bad{background:#f9e3e3;color:var(--bad)}
+.sec{margin:22px 0 10px;font-size:13px;font-weight:650;color:var(--ink2);text-transform:uppercase;letter-spacing:.6px}
+.chart{position:relative;height:280px}
+.chart.tall{height:360px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--ink2);background:var(--soft);position:sticky;top:0;cursor:pointer;user-select:none;white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tw{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.st{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.st-SIN{background:#f9e3e3;color:#a12f2f} .st-POR{background:#fde9d6;color:#a65300} .st-TRA{background:#fbf1d9;color:#8a6200}
+.st-PAR{background:#e3edfc;color:#2457b3} .st-ATE{background:#e5f4ec;color:#1f7a45}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.tools input{border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:240px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.muted{color:var(--ink2)}
+.empty{padding:28px;text-align:center;color:var(--ink2)}
+.alert{border-left:4px solid var(--warn);background:#fffaf0;padding:10px 14px;border-radius:8px;margin-bottom:10px}
+.alert.bad{border-color:var(--bad);background:#fff5f5}
+.alert.info{border-color:var(--info);background:#f3f7ff}
+.hide{display:none!important}
+#overlay{position:fixed;inset:0;background:rgba(20,24,40,.45);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+#overlay .box{background:#fff;border-radius:14px;padding:22px;max-width:520px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+#overlay label{display:block;font-size:12px;color:var(--ink2);margin:12px 0 4px}
+#overlay input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(245,246,248,.8);z-index:40;font-weight:600;color:var(--brand)}
+#dt td{white-space:nowrap}#dt td:nth-child(5),#dt td:nth-child(15){white-space:normal;min-width:200px}
+.pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px;font-size:12px}
+@media (max-width:640px){header,nav,.filters,main{padding-left:16px;padding-right:16px}.kpi .val{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Seguimiento SOLPED · OC · Ingreso · Stock</h1>
+    <div class="sub" id="hdrSub">Mantenimiento — HFE Berries Olmos</div>
+  </div>
+  <div class="sp"></div>
+  <span class="sub" id="hdrFecha"></span>
+  <button class="hbtn" id="btnRecargar" title="Volver a leer los datos">Actualizar</button>
+  <button class="hbtn" id="btnConfig" title="URL de la API y clave">Configuración</button>
+</header>
+<nav id="tabs">
+  <button data-t="resumen" class="on">Resumen</button>
+  <button data-t="compras">Compras</button>
+  <button data-t="abast">Abastecimiento</button>
+  <button data-t="prov">Proveedores</button>
+  <button data-t="inv">Inventario</button>
+  <button data-t="detalle">Detalle</button>
+  <button data-t="calidad">Calidad de datos</button>
+</nav>
+<div class="filters" id="filters">
+  <label>Área<select id="fArea"></select></label>
+  <label>Tipo<select id="fTipo"></select></label>
+  <label>Estado<select id="fEstado"></select></label>
+  <label>Gasto<select id="fGasto"></select></label>
+  <label>Urgencia<select id="fUrg"></select></label>
+  <label>Comprador<select id="fComp"></select></label>
+  <label>Solicitante<select id="fSol"></select></label>
+  <label>Solicitud desde<input type="date" id="fDesde"></label>
+  <label>hasta<input type="date" id="fHasta"></label>
+  <button class="clr" id="btnLimpiar">Limpiar filtros</button>
+</div>
+<main id="app">
+  <section data-p="resumen"></section>
+  <section data-p="compras" class="hide"></section>
+  <section data-p="abast" class="hide"></section>
+  <section data-p="prov" class="hide"></section>
+  <section data-p="inv" class="hide"></section>
+  <section data-p="detalle" class="hide"></section>
+  <section data-p="calidad" class="hide"></section>
+</main>
+
+<div id="overlay" class="hide">
+  <div class="box">
+    <h3 style="margin:0 0 4px">Conectar con Google Sheets</h3>
+    <p class="muted" style="margin:0;font-size:13px">Pegue la URL de la Web App de Apps Script (termina en <code>/exec</code>) y la clave definida en la hoja CONFIG. Se guardan solo en este navegador.</p>
+    <label for="inUrl">URL de la Web App</label>
+    <input id="inUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <label for="inClave">Clave de acceso</label>
+    <input id="inClave" type="password" placeholder="CLAVE_ACCESO">
+    <p id="cfgErr" class="alert bad hide" style="margin-top:12px"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn" id="btnCfgCancel">Cancelar</button>
+      <button class="btn pri" id="btnCfgOk">Conectar</button>
+    </div>
+  </div>
+</div>
+<div id="loading" class="hide">Cargando datos…</div>
+
+<script>
+/* =====================================================================
+   CONFIGURACIÓN
+   API_URL_POR_DEFECTO: puede dejar aquí la URL de la Web App para que
+   nadie tenga que pegarla. La CLAVE nunca se escribe en este archivo
+   (GitHub Pages es público): cada usuario la ingresa una vez.
+   ===================================================================== */
+const API_URL_POR_DEFECTO = 'https://script.google.com/macros/s/AKfycbwaDsKN0PP-vaawdxyL-TGg4MGFBnvneBkjEJKFI_tmq6tr4kOkuXB7ImSr1ETn5cl1/exec';
+const LS = { url: 'solped_api_url', clave: 'solped_api_clave', cache: 'solped_cache_v1', tab: 'solped_tab' };
+
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+/* ---------------------------- Estado ---------------------------- */
+let DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
+const charts = {};
+const $ = s => document.querySelector(s);
+const ESTADOS = ['SIN OC/OS', 'OC POR LIBERAR', 'EN TRANSITO', 'PARCIAL', 'ATENDIDO'];
+const EST_COLOR = { 'SIN OC/OS': '#c43c3c', 'OC POR LIBERAR': '#e07b1a', 'EN TRANSITO': '#d9a400', 'PARCIAL': '#2f6fde', 'ATENDIDO': '#1f8a4c' };
+const PAL = ['#3b2a6b', '#2f6fde', '#1f8a4c', '#e07b1a', '#8b5cc7', '#0f9aa8', '#c43c3c', '#7a8597', '#b8860b', '#d16ba5'];
+
+/* ---------------------------- Formatos ---------------------------- */
+const nf0 = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 });
+const fN = v => v == null || isNaN(v) ? '—' : nf0.format(v);
+const fD = v => v == null || isNaN(v) ? '—' : nf1.format(v) + ' d';
+const fP = v => v == null || isNaN(v) ? '—' : nf1.format(v * 100) + '%';
+const fS = v => {
+  if (v == null || isNaN(v)) return '—';
+  const a = Math.abs(v);
+  if (a >= 1e6) return 'S/ ' + nf1.format(v / 1e6) + ' M';
+  if (a >= 1e3) return 'S/ ' + nf1.format(v / 1e3) + ' mil';
+  return 'S/ ' + nf0.format(v);
+};
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const stCls = e => 'st st-' + String(e).replace('SIN OC/OS', 'SIN').replace('OC POR LIBERAR', 'POR').replace('EN TRANSITO', 'TRA').replace('PARCIAL', 'PAR').replace('ATENDIDO', 'ATE');
+
+/* ---------------------------- Estadística ---------------------------- */
+const vals = (a, k) => a.map(r => r[k]).filter(v => v != null && v !== '' && !isNaN(v));
+function quant(arr, q) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b), p = (s.length - 1) * q, b = Math.floor(p);
+  return s[b + 1] !== undefined ? s[b] + (p - b) * (s[b + 1] - s[b]) : s[b];
+}
+const med = a => quant(a, .5), p90 = a => quant(a, .9);
+const sum = (a, k) => a.reduce((t, r) => t + (Number(r[k]) || 0), 0);
+function groupBy(a, f) { const m = new Map(); a.forEach(r => { const k = typeof f === 'function' ? f(r) : r[f]; if (!m.has(k)) m.set(k, []); m.get(k).push(r); }); return m; }
+function semaforo(v, meta, mayorEsMejor) {
+  if (v == null || meta == null || isNaN(v)) return '';
+  if (mayorEsMejor) return v >= meta ? 'good' : (v >= meta * 0.9 ? 'warn' : 'bad');
+  return v <= meta ? 'good' : (v <= meta * 1.3 ? 'warn' : 'bad');
+}
+const M = k => (META.metas || {})[k];
+
+/* ---------------------------- Carga de datos ---------------------------- */
+function apiUrl() { return ls.get(LS.url) || API_URL_POR_DEFECTO; }
+
+function jsonp(url) {
+  return new Promise((ok, ko) => {
+    const cb = '__cb' + Date.now(), s = document.createElement('script');
+    const t = setTimeout(() => { delete window[cb]; s.remove(); ko(new Error('Tiempo de espera agotado')); }, 60000);
+    window[cb] = d => { clearTimeout(t); delete window[cb]; s.remove(); ok(d); };
+    s.onerror = () => { clearTimeout(t); delete window[cb]; ko(new Error('No se pudo conectar')); };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    document.body.appendChild(s);
+  });
+}
+
+async function pedirDatos(url, clave) {
+  const u = url + '?clave=' + encodeURIComponent(clave);
+  let d;
+  try {
+    const r = await fetch(u, { redirect: 'follow' });
+    d = await r.json();
+  } catch (e) {
+    d = await jsonp(u);
+  }
+  if (d && d.error) throw new Error(d.error === 'CLAVE_INVALIDA' ? 'Clave inválida.' : (d.detalle || d.error));
+  if (!d || !d.pos) throw new Error('Respuesta sin datos.');
+  return d;
+}
+
+async function cargar(forzar) {
+  if (window.DEMO_DATA) { iniciar(window.DEMO_DATA); return; }
+  const url = apiUrl(), clave = ls.get(LS.clave);
+  if (!url || !clave) { abrirConfig(); return; }
+  if (!forzar) {
+    const c = ls.get(LS.cache);
+    if (c) { try { iniciar(JSON.parse(c)); } catch (e) {} }
+  }
+  $('#loading').classList.remove('hide');
+  try {
+    const d = await pedirDatos(url, clave);
+    ls.set(LS.cache, JSON.stringify(d));
+    iniciar(d);
+  } catch (e) {
+    if (!DATA) { abrirConfig(e.message); }
+    else aviso('No se pudo actualizar: ' + e.message + ' Se muestran los últimos datos guardados.');
+  } finally { $('#loading').classList.add('hide'); }
+}
+
+function aviso(t) {
+  const s = document.querySelector('section[data-p="resumen"]');
+  s.insertAdjacentHTML('afterbegin', `<div class="alert bad">${esc(t)}</div>`);
+}
+
+function abrirConfig(err) {
+  $('#inUrl').value = apiUrl() || '';
+  $('#inClave').value = ls.get(LS.clave) || '';
+  $('#cfgErr').classList.toggle('hide', !err);
+  $('#cfgErr').textContent = err || '';
+  $('#overlay').classList.remove('hide');
+}
+$('#btnConfig').onclick = () => abrirConfig();
+$('#btnCfgCancel').onclick = () => $('#overlay').classList.add('hide');
+$('#btnCfgOk').onclick = async () => {
+  const url = $('#inUrl').value.trim(), clave = $('#inClave').value.trim();
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { abrirConfig('La URL debe ser de script.google.com y terminar en /exec.'); return; }
+  ls.set(LS.url, url); ls.set(LS.clave, clave);
+  $('#overlay').classList.add('hide');
+  cargar(true);
+};
+$('#btnRecargar').onclick = () => cargar(true);
+
+/* ---------------------------- Inicio ---------------------------- */
+function aObjetos(t) { return (t && t.rows || []).map(r => { const o = {}; t.cols.forEach((c, i) => o[c] = r[i]); return o; }); }
+
+function iniciar(d) {
+  DATA = d; META = d.meta || {};
+  POS = aObjetos(d.pos); STK = aObjetos(d.stock); CONS = aObjetos(d.consumo);
+  $('#hdrFecha').textContent = 'Corte ' + (META.fechaCorte || '—') + ' · procesado ' + (META.generado || '—');
+  $('#hdrSub').textContent = 'Mantenimiento — ' + fN(POS.length) + ' posiciones de SOLPED desde ' + (META.fechaDesde || 'el inicio');
+  llenarFiltros();
+  aplicar();
+}
+
+function opciones(sel, valores, todos) {
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">${todos}</option>` + valores.map(v => `<option>${esc(v)}</option>`).join('');
+  if (valores.includes(prev)) sel.value = prev;
+}
+function unicos(k, orden) {
+  const c = {}; POS.forEach(r => { const v = r[k] || '(vacío)'; c[v] = (c[v] || 0) + 1; });
+  return orden ? orden.filter(v => c[v]) : Object.keys(c).sort((a, b) => c[b] - c[a]);
+}
+function llenarFiltros() {
+  opciones($('#fArea'), unicos('area'), 'Todas');
+  opciones($('#fTipo'), unicos('tipo'), 'Todos');
+  opciones($('#fEstado'), unicos('estado', ESTADOS), 'Todos');
+  opciones($('#fGasto'), unicos('gasto'), 'OPEX y CAPEX');
+  opciones($('#fUrg'), unicos('urgencia'), 'Todas');
+  opciones($('#fComp'), unicos('comprador'), 'Todos');
+  opciones($('#fSol'), unicos('solicitante'), 'Todos');
+}
+const FMAP = { fArea: 'area', fTipo: 'tipo', fEstado: 'estado', fGasto: 'gasto', fUrg: 'urgencia', fComp: 'comprador', fSol: 'solicitante' };
+Object.keys(FMAP).concat(['fDesde', 'fHasta']).forEach(id => $('#' + id).addEventListener('change', aplicar));
+$('#btnLimpiar').onclick = () => { Object.keys(FMAP).forEach(id => $('#' + id).value = ''); $('#fDesde').value = ''; $('#fHasta').value = ''; aplicar(); };
+
+function aplicar() {
+  const f = {}; Object.entries(FMAP).forEach(([id, k]) => { const v = $('#' + id).value; if (v) f[k] = v; });
+  const de = $('#fDesde').value, ha = $('#fHasta').value;
+  FILT = POS.filter(r => {
+    for (const k in f) if ((r[k] || '(vacío)') !== f[k]) return false;
+    if (de && r.fSol < de) return false;
+    if (ha && r.fSol > ha) return false;
+    return true;
+  });
+  render();
+}
+
+/* ---------------------------- Pestañas ---------------------------- */
+let TAB = ls.get(LS.tab) || 'resumen';
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { TAB = b.dataset.t; ls.set(LS.tab, TAB); render(); });
+function render() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === TAB));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('hide', s.dataset.p !== TAB));
+  if (!DATA) return;
+  ({ resumen: pResumen, compras: pCompras, abast: pAbast, prov: pProv, inv: pInv, detalle: pDetalle, calidad: pCalidad })[TAB]();
+}
+const sec = id => document.querySelector(`section[data-p="${id}"]`);
+
+/* ---------------------------- Componentes ---------------------------- */
+function kpi(lbl, val, det, cls, metaTxt) {
+  return `<div class="card kpi ${cls || ''}"><div class="bar"></div>
+    <div class="lbl"><span>${lbl}</span>${metaTxt ? `<span class="pill ${cls || ''}">${metaTxt}</span>` : ''}</div>
+    <div class="val">${val}</div><div class="det">${det || ''}</div></div>`;
+}
+function card(id, titulo, nota, tall) {
+  return `<div class="card"><h3>${titulo}</h3><p class="note">${nota || ''}</p><div class="chart ${tall ? 'tall' : ''}"><canvas id="${id}"></canvas></div></div>`;
+}
+function grafico(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  const el = document.getElementById(id);
+  if (!el || !window.Chart) return;
+  cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } } }, cfg.options || {});
+  charts[id] = new Chart(el, cfg);
+}
+window.Chart && (Chart.defaults.font.family = 'system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif', Chart.defaults.color = '#5b6475', Chart.defaults.borderColor = '#e9ecf1');
+
+function tabla(cols, filas, opt = {}) {
+  if (!filas.length) return `<div class="empty">Sin registros para los filtros actuales.</div>`;
+  const th = cols.map(c => `<th class="${c.n ? 'n' : ''}">${c.t}</th>`).join('');
+  const tr = filas.slice(0, opt.max || 500).map(r => '<tr>' + cols.map(c => {
+    const v = c.f ? c.f(r) : esc(r[c.k]);
+    return `<td class="${c.n ? 'n' : ''}">${v == null ? '' : v}</td>`;
+  }).join('') + '</tr>').join('');
+  return `<div class="tw"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
+}
+const mes = f => f ? f.slice(0, 7) : '';
+const mesTxt = m => { const [y, mm] = m.split('-'); return ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'][+mm - 1] + '-' + y.slice(2); };
+
+/* ---------------------------- Cálculo de KPIs ---------------------------- */
+function kpis(a) {
+  const conOC = a.filter(r => r.pedido);
+  const abiertos = a.filter(r => r.estado !== 'ATENDIDO');
+  const sinOC = a.filter(r => r.estado === 'SIN OC/OS');
+  const mats = conOC.filter(r => r.tipo !== 'SERVICIO');
+  const cantS = mats.reduce((t, r) => t + (+r.cant || 0), 0);
+  const cantI = mats.reduce((t, r) => t + Math.min(+r.cantIng || 0, +r.cant || 0), 0);
+  const at = vals(a, 'aTiempo');
+  const urg = a.filter(r => r.urgencia === 'URGENTE');
+  return {
+    n: a.length, solped: new Set(a.map(r => r.solped)).size, oc: new Set(conOC.map(r => r.pedido)).size,
+    valor: sum(a, 'valorPEN'),
+    conv: a.length ? conOC.length / a.length : null,
+    ltSO: med(vals(a, 'dSolOC')), ltSO90: p90(vals(a, 'dSolOC')),
+    ltSOu: med(vals(urg, 'dSolOC')),
+    ltOI: med(vals(a.filter(r => r.tipo !== 'SERVICIO'), 'dOCIng')), ltOI90: p90(vals(a.filter(r => r.tipo !== 'SERVICIO'), 'dOCIng')),
+    ciclo: med(vals(a.filter(r => r.tipo !== 'SERVICIO'), 'dCiclo')),
+    fill: cantS ? cantI / cantS : null,
+    atendido: a.length ? a.filter(r => r.estado === 'ATENDIDO').length / a.length : null,
+    abiertos: abiertos.length, valorAbierto: sum(abiertos, 'valorPEN'),
+    sinOC: sinOC.length, sinOCviejos: sinOC.filter(r => r.antig > (M('META_BACKLOG_DIAS') || 15)).length,
+    urg: a.length ? urg.length / a.length : null,
+    aTiempo: at.length >= 20 ? at.reduce((x, y) => x + y, 0) / at.length : null, nAT: at.length >= 20 ? at.length : 0,
+    alertStock: a.filter(r => r.alertaStock).length
+  };
+}
+
+/* ============================ RESUMEN ============================ */
+function pResumen() {
+  const k = kpis(FILT), s = sec('resumen');
+  const meta = (key, f) => M(key) != null ? 'meta ' + f(M(key)) : '';
+  s.innerHTML = `
+  ${FILT.length ? '' : '<div class="alert">No hay posiciones con los filtros seleccionados.</div>'}
+  <div class="grid k6">
+    ${kpi('Posiciones de SOLPED', fN(k.n), `${fN(k.solped)} SOLPED · ${fN(k.oc)} OC/OS`)}
+    ${kpi('Valor solicitado', fS(k.valor), 'USD convertido a TC ' + (META.tipoCambio || '—'))}
+    ${kpi('Conversión SOLPED → OC', fP(k.conv), `${fN(k.sinOC)} posiciones sin OC/OS`, semaforo(k.conv, M('META_CONVERSION'), true), meta('META_CONVERSION', fP))}
+    ${kpi('Lead time SOLPED → OC', fD(k.ltSO), `P90 ${fD(k.ltSO90)} · urgentes ${fD(k.ltSOu)}`, semaforo(k.ltSO, M('META_LT_SOLPED_OC')), meta('META_LT_SOLPED_OC', fD))}
+    ${kpi('Lead time OC → Ingreso', fD(k.ltOI), `Materiales · P90 ${fD(k.ltOI90)}`, semaforo(k.ltOI, M('META_LT_OC_ING')), meta('META_LT_OC_ING', fD))}
+    ${kpi('Ciclo SOLPED → Ingreso', fD(k.ciclo), 'Mediana, materiales', semaforo(k.ciclo, M('META_CICLO')), meta('META_CICLO', fD))}
+    ${kpi('Fill rate', fP(k.fill), 'Cantidad ingresada / solicitada (materiales)', semaforo(k.fill, M('META_FILL_RATE'), true), meta('META_FILL_RATE', fP))}
+    ${kpi('Backlog abierto', fN(k.abiertos), fS(k.valorAbierto) + ' por atender', k.sinOCviejos ? 'bad' : '', k.sinOCviejos ? k.sinOCviejos + ' sin OC > ' + (M('META_BACKLOG_DIAS') || 15) + ' d' : '')}
+    ${kpi('% urgentes', fP(k.urg), 'Urgencia 96 o necesidad _U', semaforo(k.urg, M('META_URGENTES')), meta('META_URGENTES', fP))}
+    ${kpi('Entregas a tiempo', k.nAT ? fP(k.aTiempo) : 'Sin dato', k.nAT ? fN(k.nAT) + ' posiciones con fecha de entrega' : 'Menos de 20 posiciones con fecha de entrega real en la SOLPED', semaforo(k.aTiempo, M('META_A_TIEMPO'), true), k.nAT ? meta('META_A_TIEMPO', fP) : '')}
+  </div>
+  <div class="sec">Estado y tendencia</div>
+  <div class="grid c2">
+    ${card('chEstado', 'Dónde está cada posición', 'Posiciones por estado y tipo')}
+    ${card('chTrend', 'Demanda mensual y cumplimiento', 'Posiciones por mes de solicitud (barras) y % atendido (línea)')}
+  </div>
+  <div class="grid c2" style="margin-top:14px">
+    ${card('chArea', 'Valor solicitado por área', 'Soles; barra clara = valor aún no atendido')}
+    ${card('chLTmes', 'Lead time mensual', 'Mediana de días por mes de solicitud')}
+  </div>`;
+
+  const tipos = [...new Set(FILT.map(r => r.tipo))];
+  grafico('chEstado', { type: 'bar', data: { labels: tipos, datasets: ESTADOS.map(e => ({ label: e, backgroundColor: EST_COLOR[e], data: tipos.map(t => FILT.filter(r => r.tipo === t && r.estado === e).length) })) },
+    options: { indexAxis: 'y', scales: { x: { stacked: true }, y: { stacked: true } } } });
+
+  const meses = [...new Set(FILT.map(r => mes(r.fSol)))].filter(Boolean).sort();
+  const gM = groupBy(FILT, r => mes(r.fSol));
+  grafico('chTrend', { data: { labels: meses.map(mesTxt), datasets: [
+    { type: 'line', label: '% atendido', yAxisID: 'y2', borderColor: '#1f8a4c', backgroundColor: '#1f8a4c', data: meses.map(m => { const a = gM.get(m) || []; return a.length ? +(a.filter(r => r.estado === 'ATENDIDO').length / a.length * 100).toFixed(1) : null; }) },
+    { type: 'bar', label: 'Posiciones', backgroundColor: '#3b2a6b', data: meses.map(m => (gM.get(m) || []).length) }] },
+    options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'posiciones' } }, y2: { position: 'right', min: 0, max: 100, grid: { display: false }, title: { display: true, text: '% atendido' } } } } });
+
+  const gA = [...groupBy(FILT, 'area')].map(([a, rs]) => ({ a, v: sum(rs, 'valorPEN'), o: sum(rs.filter(r => r.estado !== 'ATENDIDO'), 'valorPEN') })).sort((x, y) => y.v - x.v);
+  grafico('chArea', { type: 'bar', data: { labels: gA.map(x => x.a), datasets: [
+    { label: 'Atendido', backgroundColor: '#3b2a6b', data: gA.map(x => Math.round(x.v - x.o)) },
+    { label: 'Por atender', backgroundColor: '#b9addb', data: gA.map(x => Math.round(x.o)) }] },
+    options: { indexAxis: 'y', scales: { x: { stacked: true, ticks: { callback: v => fS(v) } }, y: { stacked: true } }, plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fS(c.raw) } } } } });
+
+  grafico('chLTmes', { type: 'line', data: { labels: meses.map(mesTxt), datasets: [
+    { label: 'SOLPED → OC', borderColor: '#2f6fde', backgroundColor: '#2f6fde', data: meses.map(m => med(vals(gM.get(m) || [], 'dSolOC'))) },
+    { label: 'OC → Ingreso (mat.)', borderColor: '#e07b1a', backgroundColor: '#e07b1a', data: meses.map(m => med(vals((gM.get(m) || []).filter(r => r.tipo !== 'SERVICIO'), 'dOCIng'))) }] },
+    options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'días (mediana)' } } } } });
+}
+
+/* ============================ COMPRAS ============================ */
+function pCompras() {
+  const s = sec('compras');
+  const sinOC = FILT.filter(r => r.estado === 'SIN OC/OS').sort((a, b) => b.antig - a.antig);
+  const porLib = FILT.filter(r => r.estado === 'OC POR LIBERAR');
+  const byC = [...groupBy(FILT.filter(r => r.pedido), 'comprador')].map(([c, rs]) => ({ c, n: rs.length, oc: new Set(rs.map(r => r.pedido)).size, v: sum(rs, 'valorPEN'), lt: med(vals(rs, 'dSolOC')), p: p90(vals(rs, 'dSolOC')) })).sort((a, b) => b.n - a.n);
+  const byU = ['URGENTE', 'REGULAR', 'SIN CLASIFICAR'].map(u => ({ u, rs: FILT.filter(r => r.urgencia === u) })).filter(x => x.rs.length);
+  s.innerHTML = `
+  <div class="grid k6">
+    ${kpi('Sin OC/OS', fN(sinOC.length), fS(sum(sinOC, 'valorPEN')) + ' · mediana ' + fD(med(vals(sinOC, 'antig'))) + ' de espera', sinOC.length ? 'warn' : 'good')}
+    ${kpi('OC por liberar', fN(porLib.length), fS(sum(porLib, 'valorPEN')), porLib.length ? 'warn' : 'good')}
+    ${kpi('Lead time SOLPED → OC', fD(med(vals(FILT, 'dSolOC'))), 'P90 ' + fD(p90(vals(FILT, 'dSolOC'))), semaforo(med(vals(FILT, 'dSolOC')), M('META_LT_SOLPED_OC')))}
+    ${byU.map(x => kpi('SOLPED → OC · ' + x.u.toLowerCase(), fD(med(vals(x.rs, 'dSolOC'))), fN(x.rs.length) + ' posiciones', x.u === 'URGENTE' ? semaforo(med(vals(x.rs, 'dSolOC')), M('META_LT_SOLPED_OC_URG')) : '', x.u === 'URGENTE' && M('META_LT_SOLPED_OC_URG') != null ? 'meta ' + fD(M('META_LT_SOLPED_OC_URG')) : '')).join('')}
+  </div>
+  <div class="sec">Velocidad de compra</div>
+  <div class="grid c2">
+    ${card('chHistSO', 'Distribución de días SOLPED → OC', 'Número de posiciones por tramo de días')}
+    ${card('chComp', 'Lead time por comprador', 'Mediana y P90 de días SOLPED → OC; etiqueta = posiciones')}
+  </div>
+  <div class="grid c2" style="margin-top:14px">
+    ${card('chGasto', 'OPEX vs CAPEX por mes', 'Valor solicitado en soles')}
+    <div class="card"><h3>Carga por comprador</h3><p class="note">Posiciones con OC/OS en el periodo filtrado</p>
+    ${tabla([{ t: 'Comprador', k: 'c' }, { t: 'Posiciones', k: 'n', n: 1, f: r => fN(r.n) }, { t: 'OC/OS', n: 1, f: r => fN(r.oc) }, { t: 'Valor', n: 1, f: r => fS(r.v) }, { t: 'Mediana', n: 1, f: r => fD(r.lt) }, { t: 'P90', n: 1, f: r => fD(r.p) }], byC)}</div>
+  </div>
+  <div class="sec">Backlog sin OC/OS (más antiguas primero)</div>
+  <div class="card">${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Fecha', k: 'fSol' }, { t: 'Días', n: 1, f: r => `<b>${fN(r.antig)}</b>` }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Área', k: 'area' }, { t: 'Solicitante', k: 'solicitante' }, { t: 'Comprador', k: 'comprador' }, { t: 'Urgencia', k: 'urgencia' }, { t: 'Valor', n: 1, f: r => fS(r.valorPEN) }], sinOC, { max: 300 })}</div>`;
+
+  const tramos = [[0, 0, '0'], [1, 3, '1–3'], [4, 7, '4–7'], [8, 15, '8–15'], [16, 30, '16–30'], [31, 60, '31–60'], [61, 1e9, '> 60']];
+  const d = vals(FILT, 'dSolOC'), meta = M('META_LT_SOLPED_OC') || 7;
+  grafico('chHistSO', { type: 'bar', data: { labels: tramos.map(t => t[2] + ' d'), datasets: [{ label: 'Posiciones', data: tramos.map(t => d.filter(x => x >= t[0] && x <= t[1]).length), backgroundColor: tramos.map(t => t[1] <= meta ? '#1f8a4c' : (t[0] > 30 ? '#c43c3c' : '#d9a400')) }] }, options: { plugins: { legend: { display: false } } } });
+  const top = byC.slice(0, 12);
+  grafico('chComp', { type: 'bar', data: { labels: top.map(x => x.c + ' (' + x.n + ')'), datasets: [{ label: 'Mediana', backgroundColor: '#3b2a6b', data: top.map(x => x.lt) }, { label: 'P90', backgroundColor: '#b9addb', data: top.map(x => x.p) }] }, options: { indexAxis: 'y', scales: { x: { title: { display: true, text: 'días' } } } } });
+  const meses = [...new Set(FILT.map(r => mes(r.fSol)))].filter(Boolean).sort();
+  grafico('chGasto', { type: 'bar', data: { labels: meses.map(mesTxt), datasets: ['OPEX', 'CAPEX'].map((g, i) => ({ label: g, backgroundColor: i ? '#e07b1a' : '#3b2a6b', data: meses.map(m => Math.round(sum(FILT.filter(r => r.gasto === g && mes(r.fSol) === m), 'valorPEN'))) })) },
+    options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fS(v) } } }, plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fS(c.raw) } } } } });
+}
+
+/* ============================ ABASTECIMIENTO ============================ */
+function pAbast() {
+  const s = sec('abast');
+  const abiertas = FILT.filter(r => r.pedido && r.estado !== 'ATENDIDO');
+  const tram = [[0, 15, '0–15 d'], [16, 30, '16–30 d'], [31, 60, '31–60 d'], [61, 1e9, '> 60 d']];
+  const mats = FILT.filter(r => r.tipo !== 'SERVICIO');
+  const k = kpis(FILT);
+  const serv = FILT.filter(r => r.tipo === 'SERVICIO' && r.pedido);
+  const servSin = serv.filter(r => r.estado !== 'ATENDIDO').length;
+  s.innerHTML = `
+  ${serv.length && servSin / serv.length > .5 ? `<div class="alert info"><b>Servicios:</b> ${fP(servSin / serv.length)} de las posiciones de servicio con OS no tienen ingreso en MB51. Las hojas de entrada de servicio no siempre generan movimiento 101; exporte ME2N con las columnas «Por entregar (cantidad)» para que el estado sea exacto.</div>` : ''}
+  <div class="grid k6">
+    ${kpi('OC/OS abiertas', fN(abiertas.length), fS(sum(abiertas, 'valorPEN')) + ' por recibir', '')}
+    ${kpi('Abiertas > 60 días', fN(abiertas.filter(r => r.antig > 60).length), 'desde la fecha de OC', abiertas.filter(r => r.antig > 60).length ? 'bad' : 'good')}
+    ${kpi('Entregas parciales', fN(FILT.filter(r => r.estado === 'PARCIAL').length), 'ingreso menor a lo solicitado')}
+    ${kpi('Lead time OC → Ingreso', fD(k.ltOI), 'Materiales · P90 ' + fD(k.ltOI90), semaforo(k.ltOI, M('META_LT_OC_ING')), M('META_LT_OC_ING') != null ? 'meta ' + fD(M('META_LT_OC_ING')) : '')}
+    ${kpi('Fill rate materiales', fP(k.fill), '', semaforo(k.fill, M('META_FILL_RATE'), true), M('META_FILL_RATE') != null ? 'meta ' + fP(M('META_FILL_RATE')) : '')}
+    ${kpi('Compras con stock', fN(k.alertStock), 'posiciones abiertas de materiales con stock libre en MB52', k.alertStock ? 'warn' : 'good')}
+  </div>
+  <div class="sec">Antigüedad y tiempos</div>
+  <div class="grid c2">
+    ${card('chAging', 'Antigüedad de OC/OS abiertas por tipo', 'Días desde la fecha de OC al corte')}
+    ${card('chFill', 'Cumplimiento por tipo', '% de posiciones por estado')}
+  </div>
+  <div class="grid c2" style="margin-top:14px">
+    ${card('chLTtipo', 'OC → Ingreso por área', 'Mediana de días, materiales y agroquímicos')}
+    ${card('chCiclo', 'Ciclo completo por mes', 'Mediana de días SOLPED → OC y OC → Ingreso (materiales)')}
+  </div>
+  <div class="sec">OC/OS abiertas más antiguas</div>
+  <div class="card">${tabla([{ t: 'OC/OS', f: r => esc(r.pedido) + '-' + r.posPed }, { t: 'Fecha OC', k: 'fOC' }, { t: 'Días', n: 1, f: r => `<b>${fN(r.antig)}</b>` }, { t: 'Estado', f: r => `<span class="${stCls(r.estado)}">${r.estado}</span>` }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Proveedor', k: 'proveedor' }, { t: 'Área', k: 'area' }, { t: 'Solicitado', n: 1, f: r => fN(r.cant) }, { t: 'Ingresado', n: 1, f: r => fN(r.cantIng) }, { t: 'Valor', n: 1, f: r => fS(r.valorPEN) }], abiertas.sort((a, b) => b.antig - a.antig), { max: 300 })}</div>`;
+
+  const tipos = [...new Set(abiertas.map(r => r.tipo))];
+  grafico('chAging', { type: 'bar', data: { labels: tram.map(t => t[2]), datasets: tipos.map((t, i) => ({ label: t, backgroundColor: PAL[i], data: tram.map(x => abiertas.filter(r => r.tipo === t && r.antig >= x[0] && r.antig <= x[1]).length) })) }, options: { scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'posiciones' } } } } });
+  const tt = [...new Set(FILT.map(r => r.tipo))];
+  grafico('chFill', { type: 'bar', data: { labels: tt, datasets: ESTADOS.map(e => ({ label: e, backgroundColor: EST_COLOR[e], data: tt.map(t => { const a = FILT.filter(r => r.tipo === t); return a.length ? +(a.filter(r => r.estado === e).length / a.length * 100).toFixed(1) : 0; }) })) }, options: { scales: { x: { stacked: true }, y: { stacked: true, max: 100, ticks: { callback: v => v + '%' } } } } });
+  const gA = [...groupBy(mats, 'area')].map(([a, rs]) => ({ a, m: med(vals(rs, 'dOCIng')), n: vals(rs, 'dOCIng').length })).filter(x => x.n).sort((a, b) => b.m - a.m);
+  grafico('chLTtipo', { type: 'bar', data: { labels: gA.map(x => x.a + ' (' + x.n + ')'), datasets: [{ label: 'Mediana OC → Ingreso', backgroundColor: gA.map(x => x.m > (M('META_LT_OC_ING') || 15) ? '#e07b1a' : '#1f8a4c'), data: gA.map(x => x.m) }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'días' } } } } });
+  const meses = [...new Set(mats.map(r => mes(r.fSol)))].filter(Boolean).sort();
+  const gM = groupBy(mats, r => mes(r.fSol));
+  grafico('chCiclo', { type: 'bar', data: { labels: meses.map(mesTxt), datasets: [{ label: 'SOLPED → OC', backgroundColor: '#2f6fde', data: meses.map(m => med(vals(gM.get(m), 'dSolOC'))) }, { label: 'OC → Ingreso', backgroundColor: '#e07b1a', data: meses.map(m => med(vals(gM.get(m), 'dOCIng'))) }] }, options: { scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'días (mediana)' } } } } });
+}
+
+/* ============================ PROVEEDORES ============================ */
+function pProv() {
+  const s = sec('prov');
+  const conP = FILT.filter(r => r.proveedor);
+  if (!conP.length) {
+    s.innerHTML = `<div class="alert info">Ninguna OC del filtro actual cruza con ME2N. Exporte ME2N con el mismo rango de fechas que ME5A para ver proveedores, valor de OC y tiempos de entrega por proveedor.</div>`;
+    return;
+  }
+  const gp = [...groupBy(conP, 'proveedor')].map(([p, rs]) => {
+    const oi = vals(rs.filter(r => r.tipo !== 'SERVICIO'), 'dOCIng');
+    return { p, n: rs.length, oc: new Set(rs.map(r => r.pedido)).size, v: rs.reduce((t, r) => t + (r.valorOC || r.valorPEN || 0), 0), lt: med(oi), p90: p90(oi), ab: rs.filter(r => r.estado !== 'ATENDIDO').length };
+  }).sort((a, b) => b.v - a.v);
+  const tot = gp.reduce((t, x) => t + x.v, 0), top5 = gp.slice(0, 5).reduce((t, x) => t + x.v, 0);
+  s.innerHTML = `
+  <div class="grid k6">
+    ${kpi('Proveedores', fN(gp.length), fN(new Set(conP.map(r => r.pedido)).size) + ' OC/OS cruzadas con ME2N')}
+    ${kpi('Valor en OC', fS(tot), 'Valor neto ME2N')}
+    ${kpi('Concentración top 5', fP(tot ? top5 / tot : null), gp.slice(0, 5).map(x => x.p.split(' ')[0]).join(', '), tot && top5 / tot > .8 ? 'warn' : '')}
+    ${kpi('Cobertura del cruce', fP(conP.length / Math.max(1, FILT.filter(r => r.pedido).length)), 'posiciones con OC que están en ME2N', conP.length / Math.max(1, FILT.filter(r => r.pedido).length) < .9 ? 'warn' : 'good')}
+  </div>
+  <div class="sec">Pareto de compra</div>
+  <div class="grid c2">
+    ${card('chPareto', 'Pareto de valor por proveedor', 'Barras = valor; línea = % acumulado', true)}
+    <div class="card"><h3>Desempeño por proveedor</h3><p class="note">Ordenado por valor; lead time solo materiales</p>
+    ${tabla([{ t: 'Proveedor', k: 'p' }, { t: 'Pos.', n: 1, f: r => fN(r.n) }, { t: 'OC', n: 1, f: r => fN(r.oc) }, { t: 'Valor', n: 1, f: r => fS(r.v) }, { t: '% total', n: 1, f: r => fP(r.v / tot) }, { t: 'OC→Ing', n: 1, f: r => fD(r.lt) }, { t: 'P90', n: 1, f: r => fD(r.p90) }, { t: 'Abiertas', n: 1, f: r => r.ab ? `<b>${r.ab}</b>` : '0' }], gp)}</div>
+  </div>`;
+  const top = gp.slice(0, 15); let acc = 0;
+  grafico('chPareto', { data: { labels: top.map(x => x.p.length > 26 ? x.p.slice(0, 25) + '…' : x.p), datasets: [
+    { type: 'line', label: '% acumulado', yAxisID: 'y2', borderColor: '#e07b1a', backgroundColor: '#e07b1a', data: top.map(x => +((acc += x.v) / tot * 100).toFixed(1)) },
+    { type: 'bar', label: 'Valor', backgroundColor: '#3b2a6b', data: top.map(x => Math.round(x.v)) }] },
+    options: { scales: { y: { ticks: { callback: v => fS(v) } }, y2: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { callback: v => v + '%' } }, x: { ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } } } } } });
+}
+
+/* ============================ INVENTARIO ============================ */
+function pInv() {
+  const s = sec('inv');
+  if (!STK.length) {
+    s.innerHTML = `<div class="alert info">No hay datos de MB52. Pegue el stock por almacén (MB52) y el maestro (MM60) en el Google Sheet y vuelva a procesar para ver valor de inventario, cobertura y materiales sin movimiento.</div>`;
+    return;
+  }
+  const conStock = STK.filter(r => r.libre > 0);
+  const vTot = sum(conStock, 'valor');
+  const sinMov = conStock.filter(r => r.sinMov);
+  const vSin = sum(sinMov, 'valor');
+  const cob = conStock.map(r => r.cobertura).filter(v => v != null);
+  const cMin = M('META_COBERTURA_MIN') || 30, cMax = M('META_COBERTURA_MAX') || 90;
+  const buck = [['Sin consumo ' + (META.ventanaConsumo || 90) + ' d', r => r.cobertura == null], ['< ' + cMin + ' d', r => r.cobertura != null && r.cobertura < cMin], [cMin + '–' + cMax + ' d', r => r.cobertura >= cMin && r.cobertura <= cMax], ['> ' + cMax + ' d', r => r.cobertura > cMax]];
+  const area = $('#fArea').value;
+  const cons = CONS.filter(r => !area || r.area === area);
+  const conCompra = FILT.filter(r => r.alertaStock);
+  const mes3 = [...new Set(cons.map(r => r.mes))].filter(m => m <= (META.fechaCorte || '9999').slice(0, 7)).sort().slice(-3);
+  s.innerHTML = `
+  <div class="grid k6">
+    ${kpi('Valor de stock libre', fS(vTot), fN(conStock.length) + ' materiales con stock')}
+    ${kpi('Stock sin movimiento', fP(vTot ? vSin / vTot : null), fS(vSin) + ' · ' + fN(sinMov.length) + ' materiales sin consumo > ' + (META.diasLento || 180) + ' d', semaforo(vTot ? vSin / vTot : null, M('META_SIN_MOV')), M('META_SIN_MOV') != null ? 'meta ≤ ' + fP(M('META_SIN_MOV')) : '')}
+    ${kpi('Cobertura mediana', fD(med(cob)), 'stock / consumo diario de ' + (META.ventanaConsumo || 90) + ' d', med(cob) == null ? '' : (med(cob) < cMin ? 'warn' : (med(cob) > cMax ? 'warn' : 'good')), 'sano ' + cMin + '–' + cMax + ' d')}
+    ${kpi('Consumo últimos 3 meses', fS(sum(cons.filter(r => mes3.includes(r.mes)), 'valorPEN')), mes3.map(mesTxt).join(', ') + (area ? ' · ' + esc(area) : ' · todas las áreas'))}
+    ${kpi('Compras con stock disponible', fN(conCompra.length), 'posiciones abiertas de SOLPED', conCompra.length ? 'warn' : 'good')}
+  </div>
+  <div class="sec">Salud del inventario</div>
+  <div class="grid c2">
+    ${card('chCob', 'Valor de stock por cobertura', 'Soles; cobertura = stock libre / consumo diario promedio')}
+    ${card('chCons', 'Consumo mensual valorizado' + (area ? ' · ' + area : ' por área'), 'Salidas 201/221/261 netas de reversas (MB51)')}
+  </div>
+  <div class="grid c2" style="margin-top:14px">
+    <div class="card"><h3>Mayor valor sin movimiento</h3><p class="note">Candidatos a revisión, traslado o baja</p>
+    ${tabla([{ t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Stock', n: 1, f: r => fN(r.libre) + ' ' + esc(r.um) }, { t: 'Valor', n: 1, f: r => fS(r.valor) }, { t: 'Último consumo', f: r => r.ultConsumo || '<span class="muted">sin registro</span>' }], sinMov.sort((a, b) => b.valor - a.valor), { max: 100 })}</div>
+    <div class="card"><h3>Compras abiertas con stock libre</h3><p class="note">Revisar si la SOLPED es necesaria</p>
+    ${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Pendiente', n: 1, f: r => fN(r.cant - (r.cantIng || 0)) }, { t: 'Stock libre', n: 1, f: r => fN(r.stockLibre) }, { t: 'Estado', f: r => `<span class="${stCls(r.estado)}">${r.estado}</span>` }], conCompra, { max: 200 })}</div>
+  </div>`;
+  grafico('chCob', { type: 'bar', data: { labels: buck.map(b => b[0]), datasets: [{ label: 'Valor', data: buck.map(b => Math.round(sum(conStock.filter(b[1]), 'valor'))), backgroundColor: ['#7a8597', '#d9a400', '#1f8a4c', '#e07b1a'] }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fS(c.raw) } } }, scales: { y: { ticks: { callback: v => fS(v) } } } } });
+  const meses = [...new Set(cons.map(r => r.mes))].sort().slice(-18);
+  const areas = [...groupBy(cons.filter(r => meses.includes(r.mes)), 'area')].map(([a, rs]) => ({ a, v: sum(rs, 'valorPEN') })).sort((x, y) => y.v - x.v);
+  const topA = areas.slice(0, 6).map(x => x.a);
+  const sets = topA.map((a, i) => ({ label: a, backgroundColor: PAL[i], data: meses.map(m => Math.round(sum(cons.filter(r => r.mes === m && r.area === a), 'valorPEN'))) }));
+  if (areas.length > 6) sets.push({ label: 'Otras', backgroundColor: '#c9ced8', data: meses.map(m => Math.round(sum(cons.filter(r => r.mes === m && !topA.includes(r.area)), 'valorPEN'))) });
+  grafico('chCons', { type: 'bar', data: { labels: meses.map(mesTxt), datasets: sets }, options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fS(v) } } }, plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fS(c.raw) } } } } });
+}
+
+/* ============================ DETALLE ============================ */
+let DET = { q: '', sort: 'fSol', dir: -1, page: 0 };
+const DCOLS = [['solped', 'SOLPED'], ['pos', 'Pos'], ['fSol', 'Fecha sol.'], ['material', 'Material'], ['texto', 'Texto breve'], ['tipo', 'Tipo'], ['area', 'Área'], ['solicitante', 'Solicitante'], ['urgencia', 'Urgencia'], ['cant', 'Cant.', 1], ['valorPEN', 'Valor S/', 1], ['pedido', 'OC/OS'], ['fOC', 'Fecha OC'], ['comprador', 'Comprador'], ['proveedor', 'Proveedor'], ['cantIng', 'Ingresado', 1], ['fIng', 'Fecha ingreso'], ['estado', 'Estado'], ['dSolOC', 'Días SOL→OC', 1], ['dOCIng', 'Días OC→ING', 1], ['antig', 'Antigüedad', 1]];
+function pDetalle() {
+  const s = sec('detalle');
+  if (!s.dataset.ok) {
+    s.innerHTML = `<div class="card"><div class="tools"><input id="dq" placeholder="Buscar SOLPED, OC, material, texto, proveedor…"><span class="muted" id="dn"></span><span style="flex:1"></span><button class="btn" id="dcsv">Descargar CSV</button></div><div id="dt"></div><div class="pager" id="dp"></div></div>`;
+    s.dataset.ok = 1;
+    $('#dq').oninput = e => { DET.q = e.target.value.toLowerCase(); DET.page = 0; dibujarDetalle(); };
+    $('#dcsv').onclick = csv;
+  }
+  dibujarDetalle();
+}
+function filasDetalle() {
+  const q = DET.q;
+  let a = q ? FILT.filter(r => [r.solped, r.pedido, r.material, r.texto, r.proveedor, r.solicitante].some(v => String(v || '').toLowerCase().includes(q))) : FILT.slice();
+  const k = DET.sort, d = DET.dir;
+  a.sort((x, y) => { const u = x[k], v = y[k]; if (u == null || u === '') return 1; if (v == null || v === '') return -1; return (u > v ? 1 : u < v ? -1 : 0) * d; });
+  return a;
+}
+function dibujarDetalle() {
+  const a = filasDetalle(), ps = 100, pages = Math.max(1, Math.ceil(a.length / ps));
+  DET.page = Math.min(DET.page, pages - 1);
+  const pg = a.slice(DET.page * ps, DET.page * ps + ps);
+  $('#dn').textContent = fN(a.length) + ' posiciones';
+  $('#dt').innerHTML = `<div class="tw" style="max-height:620px"><table><thead><tr>${DCOLS.map(c => `<th data-k="${c[0]}" class="${c[2] ? 'n' : ''}">${c[1]}${DET.sort === c[0] ? (DET.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${pg.map(r => '<tr>' + DCOLS.map(([k, , n]) => {
+    let v = r[k];
+    if (k === 'estado') v = `<span class="${stCls(v)}">${v}</span>`;
+    else if (k === 'valorPEN') v = fN(v);
+    else if (n) v = v == null ? '' : nf1.format(v);
+    else v = esc(v);
+    return `<td class="${n ? 'n' : ''}">${v}</td>`;
+  }).join('') + '</tr>').join('')}</tbody></table></div>`;
+  $('#dt').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; DET.dir = DET.sort === k ? -DET.dir : -1; DET.sort = k; dibujarDetalle(); });
+  $('#dp').innerHTML = `<button class="btn" ${DET.page ? '' : 'disabled'} id="pPrev">‹</button><span>Página ${DET.page + 1} de ${pages}</span><button class="btn" ${DET.page < pages - 1 ? '' : 'disabled'} id="pNext">›</button>`;
+  $('#pPrev').onclick = () => { DET.page--; dibujarDetalle(); };
+  $('#pNext').onclick = () => { DET.page++; dibujarDetalle(); };
+}
+function csv() {
+  const a = filasDetalle(), cols = DATA.pos.cols;
+  const q = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const txt = '﻿' + cols.join(';') + '\n' + a.map(r => cols.map(c => q(r[c])).join(';')).join('\n');
+  const b = new Blob([txt], { type: 'text/csv;charset=utf-8' }), l = document.createElement('a');
+  l.href = URL.createObjectURL(b); l.download = 'posiciones_' + (META.fechaCorte || 'corte') + '.csv'; l.click();
+}
+
+/* ============================ CALIDAD ============================ */
+function pCalidad() {
+  const s = sec('calidad'), f = META.fuentes || {};
+  s.innerHTML = `
+  <div class="grid k6">
+    ${['ME5A', 'ME2N', 'MB51', 'MB52', 'MM60'].map(t => kpi(t, fN(f[t] || 0), 'filas leídas', f[t] ? 'good' : 'bad')).join('')}
+  </div>
+  <div class="sec">Advertencias del último proceso</div>
+  <div class="card">${(META.advertencias || []).length ? META.advertencias.map(a => `<div class="alert">${esc(a)}</div>`).join('') : '<div class="empty">Sin advertencias.</div>'}</div>
+  <div class="sec">Solicitantes sin área</div>
+  <div class="grid c2">
+    <div class="card"><h3>Agregar a MAESTRO_SOLICITANTES</h3><p class="note">Mientras no tengan área, sus posiciones aparecen como «SIN MAPEAR»</p>
+    ${tabla([{ t: 'Usuario SAP', k: 'usuario' }, { t: 'Posiciones', n: 1, f: r => fN(r.posiciones) }], META.sinArea || [])}</div>
+    <div class="card"><h3>Reglas aplicadas</h3><p class="note">Configurables en la hoja CONFIG</p>
+    <table><tbody>
+      <tr><td>Fecha de corte</td><td>${esc(META.fechaCorte)}</td></tr>
+      <tr><td>SOLPED desde</td><td>${esc(META.fechaDesde)}</td></tr>
+      <tr><td>Tipo de cambio USD</td><td>${esc(META.tipoCambio)}</td></tr>
+      <tr><td>Ventana de consumo</td><td>${esc(META.ventanaConsumo)} días</td></tr>
+      <tr><td>Sin movimiento</td><td>más de ${esc(META.diasLento)} días sin consumo</td></tr>
+      <tr><td>Fechas inconsistentes</td><td>${fN(META.inconsistentes)} posiciones (excluidas de lead times)</td></tr>
+      ${Object.entries(META.metas || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+
+cargar(false);
+</script>
+</body>
+</html>
