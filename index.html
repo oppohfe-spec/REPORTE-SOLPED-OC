@@ -70,7 +70,10 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 #overlay label{display:block;font-size:12px;color:var(--ink2);margin:12px 0 4px}
 #overlay input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(245,246,248,.8);z-index:40;font-weight:600;color:var(--brand)}
-#dt td{white-space:nowrap}#dt td:nth-child(5),#dt td:nth-child(15){white-space:normal;min-width:200px}
+#dt td{white-space:nowrap}#dt td:nth-child(5),#dt td:nth-child(16){white-space:normal;min-width:200px}
+.ms{position:relative}.ms-pan{position:absolute;z-index:30;top:calc(100% + 4px);left:0;width:280px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(20,24,40,.15);padding:8px}
+.ms-pan input{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px}.ms-act{display:flex;gap:6px;margin:6px 0}.ms-act .btn{padding:3px 10px;font-size:12px}
+.ms-list{max-height:260px;overflow:auto}.ms-list input{min-width:0!important;width:auto;margin:0}#ct td{white-space:nowrap}#ct td:nth-child(2),#ct td:nth-child(7){white-space:normal;min-width:180px}.ms-list label{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}.ms-list label:hover{background:var(--soft)}.ms-list label span:first-of-type{flex:1}
 .pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px;font-size:12px}
 @media (max-width:640px){header,nav,.filters,main{padding-left:16px;padding-right:16px}.kpi .val{font-size:22px}}
 </style>
@@ -93,6 +96,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <button data-t="prov">Proveedores</button>
   <button data-t="inv">Inventario</button>
   <button data-t="detalle">Detalle</button>
+  <button data-t="costos">Historial de costos</button>
   <button data-t="calidad">Calidad de datos</button>
 </nav>
 <div class="filters" id="filters">
@@ -114,6 +118,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <section data-p="prov" class="hide"></section>
   <section data-p="inv" class="hide"></section>
   <section data-p="detalle" class="hide"></section>
+  <section data-p="costos" class="hide"></section>
   <section data-p="calidad" class="hide"></section>
 </main>
 
@@ -314,7 +319,7 @@ function render() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === TAB));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('hide', s.dataset.p !== TAB));
   if (!DATA) return;
-  ({ resumen: pResumen, compras: pCompras, abast: pAbast, prov: pProv, inv: pInv, detalle: pDetalle, calidad: pCalidad })[TAB]();
+  ({ resumen: pResumen, compras: pCompras, abast: pAbast, prov: pProv, inv: pInv, detalle: pDetalle, costos: pCostos, calidad: pCalidad })[TAB]();
 }
 const sec = id => document.querySelector(`section[data-p="${id}"]`);
 
@@ -587,49 +592,166 @@ function pInv() {
 }
 
 /* ============================ DETALLE ============================ */
-let DET = { q: '', sort: 'fSol', dir: -1, page: 0 };
-const DCOLS = [['solped', 'SOLPED'], ['pos', 'Pos'], ['fSol', 'Fecha sol.'], ['material', 'Material'], ['texto', 'Texto breve'], ['tipo', 'Tipo'], ['area', 'Área'], ['solicitante', 'Solicitante'], ['urgencia', 'Urgencia'], ['cant', 'Cant.', 1], ['valorPEN', 'Valor S/', 1], ['pedido', 'OC/OS'], ['fOC', 'Fecha OC'], ['comprador', 'Comprador'], ['proveedor', 'Proveedor'], ['cantIng', 'Ingresado', 1], ['fIng', 'Fecha ingreso'], ['estado', 'Estado'], ['dSolOC', 'Días SOL→OC', 1], ['dOCIng', 'Días OC→ING', 1], ['antig', 'Antigüedad', 1]];
+let DET = { q: '', sort: 'fSol', dir: -1, page: 0, creados: new Set(), msQ: '' };
+const DCOLS = [['solped', 'SOLPED'], ['pos', 'Pos'], ['fSol', 'Fecha sol.'], ['material', 'Material'], ['texto', 'Texto breve'], ['tipo', 'Tipo'], ['area', 'Área'], ['solicitante', 'Solicitante'], ['creadoPor', 'Creado por'], ['urgencia', 'Urgencia'], ['cant', 'Cant.', 1], ['valorPEN', 'Valor S/', 1], ['pedido', 'OC/OS'], ['fOC', 'Fecha OC'], ['comprador', 'Comprador'], ['proveedor', 'Proveedor'], ['cantIng', 'Ingresado', 1], ['fIng', 'Fecha ingreso'], ['estado', 'Estado'], ['dSolOC', 'Días SOL→OC', 1], ['dOCIng', 'Días OC→ING', 1], ['antig', 'Antigüedad', 1]];
 function pDetalle() {
   const s = sec('detalle');
   if (!s.dataset.ok) {
-    s.innerHTML = `<div class="card"><div class="tools"><input id="dq" placeholder="Buscar SOLPED, OC, material, texto, proveedor…"><span class="muted" id="dn"></span><span style="flex:1"></span><button class="btn" id="dcsv">Descargar CSV</button></div><div id="dt"></div><div class="pager" id="dp"></div></div>`;
+    s.innerHTML = `<div class="card"><div class="tools">
+      <input id="dq" placeholder="Buscar SOLPED, OC, material, texto, proveedor…">
+      <div class="ms" id="msCre"><button class="btn ms-btn" id="msBtn" type="button">Creado por: Todos ▾</button>
+        <div class="ms-pan hide" id="msPan"><input id="msQ" placeholder="Buscar usuario…">
+          <div class="ms-act"><button class="btn" id="msAll" type="button">Marcar visibles</button><button class="btn" id="msNone" type="button">Limpiar</button></div>
+          <div class="ms-list" id="msList"></div></div></div>
+      <span class="muted" id="dn"></span><span style="flex:1"></span>
+      <button class="btn" id="dhtml">Descargar HTML</button><button class="btn" id="dcsv">Descargar CSV</button></div>
+      <div id="dt"></div><div class="pager" id="dp"></div></div>`;
     s.dataset.ok = 1;
     $('#dq').oninput = e => { DET.q = e.target.value.toLowerCase(); DET.page = 0; dibujarDetalle(); };
     $('#dcsv').onclick = csv;
+    $('#dhtml').onclick = descargarHtmlDetalle;
+    $('#msBtn').onclick = e => { e.stopPropagation(); $('#msPan').classList.toggle('hide'); $('#msQ').focus(); };
+    $('#msPan').onclick = e => e.stopPropagation();
+    document.addEventListener('click', () => { const p = $('#msPan'); if (p) p.classList.add('hide'); });
+    $('#msQ').oninput = e => { DET.msQ = e.target.value.toLowerCase(); listaCreados(); };
+    $('#msAll').onclick = () => { $('#msList').querySelectorAll('input').forEach(i => DET.creados.add(i.value)); DET.page = 0; listaCreados(); dibujarDetalle(); };
+    $('#msNone').onclick = () => { DET.creados.clear(); DET.page = 0; listaCreados(); dibujarDetalle(); };
+    $('#msList').onchange = e => {
+      const v = e.target.value;
+      if (e.target.checked) DET.creados.add(v); else DET.creados.delete(v);
+      DET.page = 0; etiquetaCreados(); dibujarDetalle();
+    };
   }
+  listaCreados();
   dibujarDetalle();
 }
+function listaCreados() {
+  const c = {};
+  FILT.forEach(r => { const v = r.creadoPor || '(vacío)'; c[v] = (c[v] || 0) + 1; });
+  DET.creados.forEach(v => { if (!(v in c)) c[v] = 0; });
+  const q = DET.msQ;
+  const vals = Object.keys(c).filter(v => !q || v.toLowerCase().includes(q)).sort((a, b) => c[b] - c[a] || a.localeCompare(b));
+  $('#msList').innerHTML = vals.map(v => `<label><input type="checkbox" value="${esc(v)}" ${DET.creados.has(v) ? 'checked' : ''}> <span>${esc(v)}</span><span class="muted">${fN(c[v])}</span></label>`).join('') || '<div class="muted" style="padding:6px">Sin coincidencias</div>';
+  etiquetaCreados();
+}
+function etiquetaCreados() {
+  const n = DET.creados.size;
+  $('#msBtn').textContent = 'Creado por: ' + (n === 0 ? 'Todos' : n === 1 ? [...DET.creados][0] : n + ' seleccionados') + ' ▾';
+  $('#msBtn').classList.toggle('pri', n > 0);
+}
 function filasDetalle() {
-  const q = DET.q;
-  let a = q ? FILT.filter(r => [r.solped, r.pedido, r.material, r.texto, r.proveedor, r.solicitante].some(v => String(v || '').toLowerCase().includes(q))) : FILT.slice();
+  const q = DET.q, cr = DET.creados;
+  let a = FILT.filter(r => (!cr.size || cr.has(r.creadoPor || '(vacío)')) &&
+    (!q || [r.solped, r.pedido, r.material, r.texto, r.proveedor, r.solicitante, r.creadoPor].some(v => String(v || '').toLowerCase().includes(q))));
   const k = DET.sort, d = DET.dir;
   a.sort((x, y) => { const u = x[k], v = y[k]; if (u == null || u === '') return 1; if (v == null || v === '') return -1; return (u > v ? 1 : u < v ? -1 : 0) * d; });
   return a;
+}
+function celdaDetalle(r, k, n) {
+  let v = r[k];
+  if (k === 'estado') return `<span class="${stCls(v)}">${esc(v)}</span>`;
+  if (k === 'valorPEN') return fN(v);
+  if (n) return v == null ? '' : nf1.format(v);
+  return esc(v);
 }
 function dibujarDetalle() {
   const a = filasDetalle(), ps = 100, pages = Math.max(1, Math.ceil(a.length / ps));
   DET.page = Math.min(DET.page, pages - 1);
   const pg = a.slice(DET.page * ps, DET.page * ps + ps);
-  $('#dn').textContent = fN(a.length) + ' posiciones';
-  $('#dt').innerHTML = `<div class="tw" style="max-height:620px"><table><thead><tr>${DCOLS.map(c => `<th data-k="${c[0]}" class="${c[2] ? 'n' : ''}">${c[1]}${DET.sort === c[0] ? (DET.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${pg.map(r => '<tr>' + DCOLS.map(([k, , n]) => {
-    let v = r[k];
-    if (k === 'estado') v = `<span class="${stCls(v)}">${v}</span>`;
-    else if (k === 'valorPEN') v = fN(v);
-    else if (n) v = v == null ? '' : nf1.format(v);
-    else v = esc(v);
-    return `<td class="${n ? 'n' : ''}">${v}</td>`;
-  }).join('') + '</tr>').join('')}</tbody></table></div>`;
+  $('#dn').textContent = fN(a.length) + ' posiciones · ' + fS(sum(a, 'valorPEN'));
+  $('#dt').innerHTML = `<div class="tw" style="max-height:620px"><table><thead><tr>${DCOLS.map(c => `<th data-k="${c[0]}" class="${c[2] ? 'n' : ''}">${c[1]}${DET.sort === c[0] ? (DET.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${pg.map(r => '<tr>' + DCOLS.map(([k, , n]) => `<td class="${n ? 'n' : ''}">${celdaDetalle(r, k, n)}</td>`).join('') + '</tr>').join('')}</tbody></table></div>`;
   $('#dt').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; DET.dir = DET.sort === k ? -DET.dir : -1; DET.sort = k; dibujarDetalle(); });
   $('#dp').innerHTML = `<button class="btn" ${DET.page ? '' : 'disabled'} id="pPrev">‹</button><span>Página ${DET.page + 1} de ${pages}</span><button class="btn" ${DET.page < pages - 1 ? '' : 'disabled'} id="pNext">›</button>`;
   $('#pPrev').onclick = () => { DET.page--; dibujarDetalle(); };
   $('#pNext').onclick = () => { DET.page++; dibujarDetalle(); };
 }
+function filtrosActivos() {
+  const f = [];
+  const lbl = { fArea: 'Área', fTipo: 'Tipo', fEstado: 'Estado', fGasto: 'Gasto', fUrg: 'Urgencia', fComp: 'Comprador', fSol: 'Solicitante' };
+  Object.keys(lbl).forEach(id => { const v = $('#' + id).value; if (v) f.push([lbl[id], v]); });
+  if ($('#fDesde').value) f.push(['Solicitud desde', $('#fDesde').value]);
+  if ($('#fHasta').value) f.push(['Solicitud hasta', $('#fHasta').value]);
+  if (DET.creados.size) f.push(['Creado por', [...DET.creados].join(', ')]);
+  if (DET.q) f.push(['Búsqueda', DET.q]);
+  return f;
+}
+function descargar(nombre, contenido, tipo) {
+  const b = new Blob([contenido], { type: tipo }), l = document.createElement('a');
+  l.href = URL.createObjectURL(b); l.download = nombre; document.body.appendChild(l); l.click(); l.remove();
+  setTimeout(() => URL.revokeObjectURL(l.href), 2000);
+}
+function descargarHtmlDetalle() {
+  const a = filasDetalle(), f = filtrosActivos();
+  const est = {}; a.forEach(r => est[r.estado] = (est[r.estado] || 0) + 1);
+  const css = `body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2330;margin:24px}h1{font-size:18px;margin:0 0 4px;color:#3b2a6b}.sub{color:#5b6475;margin-bottom:14px}
+.f{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}.f span{background:#f0f2f6;border-radius:6px;padding:3px 8px}.k{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}.k div{border:1px solid #e3e6ec;border-radius:8px;padding:8px 12px}.k b{display:block;font-size:16px}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #e3e6ec;padding:5px 6px;text-align:left;vertical-align:top;white-space:nowrap}td:nth-child(5),td:nth-child(16){white-space:normal;min-width:180px}.w{overflow-x:auto}th{background:#f0f2f6;position:sticky;top:0}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.st{font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:5px;white-space:nowrap}.st-SIN{background:#f9e3e3;color:#a12f2f}.st-POR{background:#fde9d6;color:#a65300}.st-TRA{background:#fbf1d9;color:#8a6200}.st-PAR{background:#e3edfc;color:#2457b3}.st-ATE{background:#e5f4ec;color:#1f7a45}
+@media print{body{margin:8mm}th{position:static}}`;
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Detalle SOLPED · ${esc(META.fechaCorte || '')}</title><style>${css}</style></head><body>
+<h1>Detalle de posiciones SOLPED · OC · Ingreso</h1>
+<div class="sub">Mantenimiento — HFE Berries Olmos · Corte ${esc(META.fechaCorte || '—')} · Procesado ${esc(META.generado || '—')} · Descargado ${esc(new Date().toLocaleString('es-PE'))}</div>
+<div class="f">${f.length ? f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('') : '<span>Sin filtros (todas las posiciones)</span>'}</div>
+<div class="k"><div>Posiciones<b>${fN(a.length)}</b></div><div>SOLPED<b>${fN(new Set(a.map(r => r.solped)).size)}</b></div><div>Valor<b>${fS(sum(a, 'valorPEN'))}</b></div>${ESTADOS.filter(e => est[e]).map(e => `<div>${e}<b>${fN(est[e])}</b></div>`).join('')}</div>
+<div class="w"><table><thead><tr>${DCOLS.map(c => `<th class="${c[2] ? 'n' : ''}">${c[1]}</th>`).join('')}</tr></thead><tbody>
+${a.map(r => '<tr>' + DCOLS.map(([k, , n]) => `<td class="${n ? 'n' : ''}">${celdaDetalle(r, k, n)}</td>`).join('') + '</tr>').join('\n')}
+</tbody></table></div></body></html>`;
+  descargar('detalle_' + (META.fechaCorte || 'corte') + '.html', html, 'text/html;charset=utf-8');
+}
 function csv() {
   const a = filasDetalle(), cols = DATA.pos.cols;
   const q = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-  const txt = '﻿' + cols.join(';') + '\n' + a.map(r => cols.map(c => q(r[c])).join(';')).join('\n');
-  const b = new Blob([txt], { type: 'text/csv;charset=utf-8' }), l = document.createElement('a');
-  l.href = URL.createObjectURL(b); l.download = 'posiciones_' + (META.fechaCorte || 'corte') + '.csv'; l.click();
+  descargar('posiciones_' + (META.fechaCorte || 'corte') + '.csv', '﻿' + cols.join(';') + '\n' + a.map(r => cols.map(c => q(r[c])).join(';')).join('\n'), 'text/csv;charset=utf-8');
+}
+
+/* ============================ COSTOS (historial) ============================ */
+let CST = { q: '', sort: 'costoMax', dir: -1, page: 0, solo: '' };
+const CCOLS = [['material', 'Material'], ['texto', 'Texto breve'], ['um', 'UM'], ['costoMax', 'Costo máx. S/', 1], ['fechaMax', 'Fecha costo máx.'], ['docMax', 'Documento'], ['fuenteMax', 'Fuente'], ['costoUlt', 'Último costo S/', 1], ['fechaUlt', 'Fecha último'], ['var', 'Último vs máx.', 1], ['alta', 'Registrado'], ['actualizado', 'Actualizado'], ['nCambios', 'N° alzas', 1]];
+function pCostos() {
+  const s = sec('costos');
+  const H = aObjetos(DATA.historial || { cols: [], rows: [] });
+  if (!H.length) { s.innerHTML = `<div class="alert info">Aún no hay historial de costos. Se crea al ejecutar «Procesar datos» con el script actualizado (hoja HISTORIAL_COSTOS).</div>`; return; }
+  H.forEach(r => r.var = r.costoMax ? (r.costoUlt - r.costoMax) / r.costoMax : null);
+  const hoy = (META.fechaCorte || '').slice(0, 7);
+  const nuevos = H.filter(r => (r.alta || '').slice(0, 7) === hoy).length;
+  const alzas = H.filter(r => (r.actualizado || '').slice(0, 7) === hoy && r.nCambios > 0).length;
+  if (!s.dataset.ok) {
+    s.innerHTML = `<div class="grid k6" id="cK"></div><div class="sec">Historial de costos por material</div><div class="card"><div class="tools">
+      <input id="cq" placeholder="Buscar material o texto…">
+      <select id="cSolo" class="btn"><option value="">Todos los materiales</option><option value="nuevo">Registrados este mes</option><option value="alza">Con alza este mes</option><option value="baja">Último costo bajo el máximo</option></select>
+      <span class="muted" id="cn"></span><span style="flex:1"></span><button class="btn" id="ccsv">Descargar CSV</button></div><div id="ct"></div><div class="pager" id="cp"></div></div>`;
+    s.dataset.ok = 1;
+    $('#cq').oninput = e => { CST.q = e.target.value.toLowerCase(); CST.page = 0; dibujarCostos(); };
+    $('#cSolo').onchange = e => { CST.solo = e.target.value; CST.page = 0; dibujarCostos(); };
+    $('#ccsv').onclick = () => { const a = filasCostos(); const q = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      descargar('historial_costos_' + (META.fechaCorte || '') + '.csv', '﻿' + CCOLS.map(c => c[1]).join(';') + '\n' + a.map(r => CCOLS.map(c => q(r[c[0]])).join(';')).join('\n'), 'text/csv;charset=utf-8'); };
+  }
+  $('#cK').innerHTML = kpi('Materiales en historial', fN(H.length), 'acumulado desde la primera carga') +
+    kpi('Nuevos este mes', fN(nuevos), 'materiales registrados por primera vez') +
+    kpi('Con alza de costo este mes', fN(alzas), 'superaron su costo máximo anterior', alzas ? 'warn' : '');
+  CST.H = H;
+  dibujarCostos();
+}
+function filasCostos() {
+  const q = CST.q, hoy = (META.fechaCorte || '').slice(0, 7);
+  let a = (CST.H || []).filter(r => (!q || (r.material + ' ' + r.texto).toLowerCase().includes(q)) &&
+    (!CST.solo || (CST.solo === 'nuevo' && (r.alta || '').slice(0, 7) === hoy) || (CST.solo === 'alza' && (r.actualizado || '').slice(0, 7) === hoy && r.nCambios > 0) || (CST.solo === 'baja' && r.var < -0.001)));
+  const k = CST.sort, d = CST.dir;
+  a.sort((x, y) => { const u = x[k], v = y[k]; if (u == null || u === '') return 1; if (v == null || v === '') return -1; return (u > v ? 1 : u < v ? -1 : 0) * d; });
+  return a;
+}
+function dibujarCostos() {
+  const a = filasCostos(), ps = 100, pages = Math.max(1, Math.ceil(a.length / ps));
+  CST.page = Math.min(CST.page, pages - 1);
+  const pg = a.slice(CST.page * ps, CST.page * ps + ps);
+  $('#cn').textContent = fN(a.length) + ' materiales';
+  const cel = (r, k) => k === 'costoMax' || k === 'costoUlt' ? (r[k] == null ? '' : 'S/ ' + r[k].toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+    : k === 'var' ? (r.var == null ? '' : `<span style="color:${r.var < -0.001 ? '#1f8a4c' : '#5b6475'}">${fP(r.var)}</span>`) : k === 'nCambios' ? fN(r[k]) : esc(r[k]);
+  $('#ct').innerHTML = `<div class="tw" style="max-height:620px"><table><thead><tr>${CCOLS.map(c => `<th data-k="${c[0]}" class="${c[2] ? 'n' : ''}">${c[1]}${CST.sort === c[0] ? (CST.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${pg.map(r => '<tr>' + CCOLS.map(([k, , n]) => `<td class="${n ? 'n' : ''}">${cel(r, k)}</td>`).join('') + '</tr>').join('')}</tbody></table></div>`;
+  $('#ct').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; CST.dir = CST.sort === k ? -CST.dir : -1; CST.sort = k; dibujarCostos(); });
+  $('#cp').innerHTML = `<button class="btn" ${CST.page ? '' : 'disabled'} id="cPrev">‹</button><span>Página ${CST.page + 1} de ${pages}</span><button class="btn" ${CST.page < pages - 1 ? '' : 'disabled'} id="cNext">›</button>`;
+  $('#cPrev').onclick = () => { CST.page--; dibujarCostos(); };
+  $('#cNext').onclick = () => { CST.page++; dibujarCostos(); };
 }
 
 /* ============================ CALIDAD ============================ */
