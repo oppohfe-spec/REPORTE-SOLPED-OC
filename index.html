@@ -272,43 +272,52 @@ function aObjetos(t) { return (t && t.rows || []).map(r => { const o = {}; t.col
 function iniciar(d) {
   DATA = d; META = d.meta || {};
   POS = aObjetos(d.pos); STK = aObjetos(d.stock); CONS = aObjetos(d.consumo);
-  $('#hdrFecha').textContent = 'Corte ' + (META.fechaCorte || '—') + ' · procesado ' + (META.generado || '—');
-  $('#hdrSub').textContent = 'Mantenimiento — ' + fN(POS.length) + ' posiciones de SOLPED desde ' + (META.fechaDesde || 'el inicio');
-  llenarFiltros();
+  const per = META.periodo || {};
+  $('#hdrFecha').textContent = 'Datos al ' + (META.fechaCorte || '—') + (META.corteOrigen === 'CONFIG' ? ' (fijado en CONFIG)' : '') + ' · procesado ' + (META.generado || '—');
+  $('#hdrSub').textContent = 'Mantenimiento — ' + fN(POS.length) + ' posiciones · SOLPED del ' + (per.desde || META.fechaDesde || '—') + ' al ' + (per.hasta || META.fechaCorte || '—');
   aplicar();
 }
 
-function opciones(sel, valores, todos) {
+function opciones(sel, entradas, todos) {
   const prev = sel.value;
-  sel.innerHTML = `<option value="">${todos}</option>` + valores.map(v => `<option>${esc(v)}</option>`).join('');
-  if (valores.includes(prev)) sel.value = prev;
+  if (prev && !entradas.some(e => e[0] === prev)) entradas.push([prev, 0]);
+  sel.innerHTML = `<option value="">${todos}</option>` + entradas.map(([v, n]) => `<option value="${esc(v)}">${esc(v)} (${fN(n)})</option>`).join('');
+  sel.value = prev;
 }
-function unicos(k, orden) {
-  const c = {}; POS.forEach(r => { const v = r[k] || '(vacío)'; c[v] = (c[v] || 0) + 1; });
-  return orden ? orden.filter(v => c[v]) : Object.keys(c).sort((a, b) => c[b] - c[a]);
+function estadoFiltros() {
+  const f = {}; Object.entries(FMAP).forEach(([id, k]) => { const v = $('#' + id).value; if (v) f[k] = v; });
+  return { f, de: $('#fDesde').value, ha: $('#fHasta').value };
 }
+function cumple(r, st, excepto) {
+  for (const k in st.f) if (k !== excepto && (r[k] || '(vacío)') !== st.f[k]) return false;
+  if (st.de && r.fSol < st.de) return false;
+  if (st.ha && r.fSol > st.ha) return false;
+  return true;
+}
+/* Filtros en cascada: cada lista muestra solo los valores que existen con los demás filtros aplicados */
 function llenarFiltros() {
-  opciones($('#fArea'), unicos('area'), 'Todas');
-  opciones($('#fTipo'), unicos('tipo'), 'Todos');
-  opciones($('#fEstado'), unicos('estado', ESTADOS), 'Todos');
-  opciones($('#fGasto'), unicos('gasto'), 'OPEX y CAPEX');
-  opciones($('#fUrg'), unicos('urgencia'), 'Todas');
-  opciones($('#fComp'), unicos('comprador'), 'Todos');
-  opciones($('#fSol'), unicos('solicitante'), 'Todos');
+  const st = estadoFiltros();
+  const lista = (k, orden) => {
+    const c = {}; POS.forEach(r => { if (cumple(r, st, k)) { const v = r[k] || '(vacío)'; c[v] = (c[v] || 0) + 1; } });
+    const ks = orden ? orden.filter(v => c[v]) : Object.keys(c).sort((a, b) => c[b] - c[a] || a.localeCompare(b));
+    return ks.map(v => [v, c[v]]);
+  };
+  opciones($('#fArea'), lista('area'), 'Todas');
+  opciones($('#fTipo'), lista('tipo'), 'Todos');
+  opciones($('#fEstado'), lista('estado', ESTADOS), 'Todos');
+  opciones($('#fGasto'), lista('gasto'), 'OPEX y CAPEX');
+  opciones($('#fUrg'), lista('urgencia'), 'Todas');
+  opciones($('#fComp'), lista('comprador'), 'Todos');
+  opciones($('#fSol'), lista('solicitante'), 'Todos');
 }
 const FMAP = { fArea: 'area', fTipo: 'tipo', fEstado: 'estado', fGasto: 'gasto', fUrg: 'urgencia', fComp: 'comprador', fSol: 'solicitante' };
 Object.keys(FMAP).concat(['fDesde', 'fHasta']).forEach(id => $('#' + id).addEventListener('change', aplicar));
 $('#btnLimpiar').onclick = () => { Object.keys(FMAP).forEach(id => $('#' + id).value = ''); $('#fDesde').value = ''; $('#fHasta').value = ''; aplicar(); };
 
 function aplicar() {
-  const f = {}; Object.entries(FMAP).forEach(([id, k]) => { const v = $('#' + id).value; if (v) f[k] = v; });
-  const de = $('#fDesde').value, ha = $('#fHasta').value;
-  FILT = POS.filter(r => {
-    for (const k in f) if ((r[k] || '(vacío)') !== f[k]) return false;
-    if (de && r.fSol < de) return false;
-    if (ha && r.fSol > ha) return false;
-    return true;
-  });
+  llenarFiltros();
+  const st = estadoFiltros();
+  FILT = POS.filter(r => cumple(r, st));
   render();
 }
 
@@ -604,7 +613,7 @@ function pDetalle() {
           <div class="ms-act"><button class="btn" id="msAll" type="button">Marcar visibles</button><button class="btn" id="msNone" type="button">Limpiar</button></div>
           <div class="ms-list" id="msList"></div></div></div>
       <span class="muted" id="dn"></span><span style="flex:1"></span>
-      <button class="btn" id="dhtml">Descargar HTML</button><button class="btn" id="dcsv">Descargar CSV</button></div>
+      <button class="btn" id="dhtml" title="Reporte interactivo: el Área elegida queda fija, el resto de filtros funciona en el archivo">Descargar HTML del área</button><button class="btn" id="dcsv">Descargar CSV</button></div>
       <div id="dt"></div><div class="pager" id="dp"></div></div>`;
     s.dataset.ok = 1;
     $('#dq').oninput = e => { DET.q = e.target.value.toLowerCase(); DET.page = 0; dibujarDetalle(); };
@@ -680,23 +689,111 @@ function descargar(nombre, contenido, tipo) {
   l.href = URL.createObjectURL(b); l.download = nombre; document.body.appendChild(l); l.click(); l.remove();
   setTimeout(() => URL.revokeObjectURL(l.href), 2000);
 }
+/* Reporte HTML interactivo por área: el área queda fija; los demás filtros funcionan dentro del archivo */
 function descargarHtmlDetalle() {
-  const a = filasDetalle(), f = filtrosActivos();
-  const est = {}; a.forEach(r => est[r.estado] = (est[r.estado] || 0) + 1);
-  const css = `body{font:12px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2330;margin:24px}h1{font-size:18px;margin:0 0 4px;color:#3b2a6b}.sub{color:#5b6475;margin-bottom:14px}
-.f{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}.f span{background:#f0f2f6;border-radius:6px;padding:3px 8px}.k{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}.k div{border:1px solid #e3e6ec;border-radius:8px;padding:8px 12px}.k b{display:block;font-size:16px}
-table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #e3e6ec;padding:5px 6px;text-align:left;vertical-align:top;white-space:nowrap}td:nth-child(5),td:nth-child(16){white-space:normal;min-width:180px}.w{overflow-x:auto}th{background:#f0f2f6;position:sticky;top:0}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-.st{font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:5px;white-space:nowrap}.st-SIN{background:#f9e3e3;color:#a12f2f}.st-POR{background:#fde9d6;color:#a65300}.st-TRA{background:#fbf1d9;color:#8a6200}.st-PAR{background:#e3edfc;color:#2457b3}.st-ATE{background:#e5f4ec;color:#1f7a45}
-@media print{body{margin:8mm}th{position:static}}`;
-  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Detalle SOLPED · ${esc(META.fechaCorte || '')}</title><style>${css}</style></head><body>
-<h1>Detalle de posiciones SOLPED · OC · Ingreso</h1>
-<div class="sub">Mantenimiento — HFE Berries Olmos · Corte ${esc(META.fechaCorte || '—')} · Procesado ${esc(META.generado || '—')} · Descargado ${esc(new Date().toLocaleString('es-PE'))}</div>
-<div class="f">${f.length ? f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('') : '<span>Sin filtros (todas las posiciones)</span>'}</div>
-<div class="k"><div>Posiciones<b>${fN(a.length)}</b></div><div>SOLPED<b>${fN(new Set(a.map(r => r.solped)).size)}</b></div><div>Valor<b>${fS(sum(a, 'valorPEN'))}</b></div>${ESTADOS.filter(e => est[e]).map(e => `<div>${e}<b>${fN(est[e])}</b></div>`).join('')}</div>
-<div class="w"><table><thead><tr>${DCOLS.map(c => `<th class="${c[2] ? 'n' : ''}">${c[1]}</th>`).join('')}</tr></thead><tbody>
-${a.map(r => '<tr>' + DCOLS.map(([k, , n]) => `<td class="${n ? 'n' : ''}">${celdaDetalle(r, k, n)}</td>`).join('') + '</tr>').join('\n')}
-</tbody></table></div></body></html>`;
-  descargar('detalle_' + (META.fechaCorte || 'corte') + '.html', html, 'text/html;charset=utf-8');
+  const area = $('#fArea').value;
+  const base = area ? POS.filter(r => (r.area || '(vacío)') === area) : POS.slice();
+  const keys = DCOLS.map(c => c[0]).filter(k => !(area && k === 'area'));
+  const ini = { tipo: $('#fTipo').value, estado: $('#fEstado').value, gasto: $('#fGasto').value, urgencia: $('#fUrg').value,
+    comprador: $('#fComp').value, solicitante: $('#fSol').value, desde: $('#fDesde').value, hasta: $('#fHasta').value,
+    q: DET.q, creados: [...DET.creados] };
+  const datos = { area: area, corte: META.fechaCorte || '', generado: META.generado || '', descargado: new Date().toLocaleString('es-PE'),
+    cols: keys, heads: keys.map(k => DCOLS.find(c => c[0] === k)), rows: base.map(r => keys.map(k => r[k] == null ? null : r[k])), ini: ini };
+  const json = JSON.stringify(datos).replace(/</g, '\\u003c');
+  const titulo = 'Estatus SOLPED · ' + (area || 'Todas las áreas') + ' · ' + (META.fechaCorte || '');
+  const css = `:root{--b:#3b2a6b;--l:#e3e6ec;--s:#f0f2f6;--t:#5b6475}*{box-sizing:border-box}body{font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2330;margin:0;background:#f5f6f8}
+header{background:var(--b);color:#fff;padding:14px 20px}header h1{margin:0;font-size:18px}header div{font-size:12px;opacity:.85}
+.fx{display:inline-block;background:#fff;color:var(--b);font-weight:700;border-radius:6px;padding:2px 8px;margin-left:6px;font-size:13px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:12px 20px;background:#fff;border-bottom:1px solid var(--l)}
+.bar label{display:flex;flex-direction:column;font-size:11px;color:var(--t);gap:3px}.bar select,.bar input{border:1px solid var(--l);border-radius:8px;padding:6px 8px;background:#fff;font:inherit;min-width:120px}
+.btn{border:1px solid var(--l);background:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit}
+details.ms{position:relative}details.ms summary{list-style:none;cursor:pointer;border:1px solid var(--l);border-radius:8px;padding:6px 10px;background:#fff;min-width:160px}
+details.ms[open] summary{border-color:var(--b)}details.ms .p{position:absolute;z-index:5;top:calc(100% + 4px);left:0;width:260px;max-height:280px;overflow:auto;background:#fff;border:1px solid var(--l);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px}
+details.ms .p label{flex-direction:row;align-items:center;gap:6px;font-size:12.5px;color:#1d2330;padding:3px 4px}details.ms .p label input{min-width:0}
+main{padding:16px 20px}.k{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.k div{background:#fff;border:1px solid var(--l);border-radius:10px;padding:8px 14px;min-width:120px}.k span{font-size:11px;color:var(--t)}.k b{display:block;font-size:18px}
+.w{overflow:auto;background:#fff;border:1px solid var(--l);border-radius:10px;max-height:70vh}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--l);padding:6px 7px;text-align:left;vertical-align:top;white-space:nowrap}
+th{background:var(--s);position:sticky;top:0;cursor:pointer;color:var(--t);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}td.wr{white-space:normal;min-width:200px}
+.st{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}.st-SIN{background:#f9e3e3;color:#a12f2f}.st-POR{background:#fde9d6;color:#a65300}.st-TRA{background:#fbf1d9;color:#8a6200}.st-PAR{background:#e3edfc;color:#2457b3}.st-ATE{background:#e5f4ec;color:#1f7a45}
+.pg{display:flex;gap:6px;justify-content:flex-end;align-items:center;margin-top:8px;font-size:12px}.muted{color:var(--t)}
+@media print{.bar,.pg{display:none}.w{max-height:none;overflow:visible}th{position:static}body{background:#fff}}`;
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titulo)}</title><style>${css}</style></head><body>
+<header><h1>Estatus de SOLPED · OC · Ingreso${area ? `<span class="fx">Área: ${esc(area)}</span>` : ''}</h1>
+<div>Mantenimiento — HFE Berries Olmos · Datos al ${esc(META.fechaCorte || '—')} · Procesado ${esc(META.generado || '—')} · Generado ${esc(new Date().toLocaleString('es-PE'))}</div></header>
+<div class="bar" id="bar"></div><main><div class="k" id="kp"></div><div class="w" id="tw"></div><div class="pg" id="pg"></div></main>
+<script>window.__D=${json};<\/script><script>(${reporteApp.toString()})();<\/script></body></html>`;
+  descargar('estatus_' + (area || 'todas').replace(/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+/g, '_') + '_' + (META.fechaCorte || '') + '.html', html, 'text/html;charset=utf-8');
+}
+
+/* Código que se ejecuta DENTRO del HTML descargado (autónomo: no usa nada del dashboard) */
+function reporteApp() {
+  const D = window.__D, $ = s => document.querySelector(s);
+  const R = D.rows.map(r => { const o = {}; D.cols.forEach((c, i) => o[c] = r[i]); return o; });
+  const nf0 = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 }), nf1 = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 });
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fS = v => { v = v || 0; const a = Math.abs(v); return a >= 1e6 ? 'S/ ' + nf1.format(v / 1e6) + ' M' : a >= 1e3 ? 'S/ ' + nf1.format(v / 1e3) + ' mil' : 'S/ ' + nf0.format(v); };
+  const ORD = ['SIN OC/OS', 'OC POR LIBERAR', 'EN TRANSITO', 'PARCIAL', 'ATENDIDO'];
+  const stc = e => 'st st-' + ({ 'SIN OC/OS': 'SIN', 'OC POR LIBERAR': 'POR', 'EN TRANSITO': 'TRA', 'PARCIAL': 'PAR', 'ATENDIDO': 'ATE' }[e] || '');
+  const SEL = [['tipo', 'Tipo', 'Todos'], ['estado', 'Estado', 'Todos'], ['urgencia', 'Urgencia', 'Todas'], ['gasto', 'Gasto', 'OPEX y CAPEX'], ['solicitante', 'Solicitante', 'Todos'], ['comprador', 'Comprador', 'Todos']];
+  const S = { f: {}, desde: D.ini.desde || '', hasta: D.ini.hasta || '', q: D.ini.q || '', cre: new Set(D.ini.creados || []), sort: 'fSol', dir: -1, page: 0 };
+  SEL.forEach(([k]) => { if (D.ini[k]) S.f[k] = D.ini[k]; });
+  $('#bar').innerHTML = SEL.map(([k, l]) => `<label>${l}<select data-k="${k}"></select></label>`).join('') +
+    `<label>Creado por<details class="ms" id="ms"><summary id="msS"></summary><div class="p" id="msL"></div></details></label>
+     <label>Solicitud desde<input type="date" id="de" value="${esc(S.desde)}"></label><label>hasta<input type="date" id="ha" value="${esc(S.hasta)}"></label>
+     <label>Buscar<input id="q" placeholder="SOLPED, OC, material, texto…" value="${esc(S.q)}"></label>
+     <button class="btn" id="lim">Limpiar filtros</button><button class="btn" id="csv">Descargar CSV</button><button class="btn" onclick="print()">Imprimir / PDF</button>`;
+  const ok = (r, sin) => {
+    for (const k in S.f) if (k !== sin && (r[k] || '(vacío)') !== S.f[k]) return false;
+    if (sin !== 'creadoPor' && S.cre.size && !S.cre.has(r.creadoPor || '(vacío)')) return false;
+    if (S.desde && r.fSol < S.desde) return false;
+    if (S.hasta && r.fSol > S.hasta) return false;
+    if (S.q && ![r.solped, r.pedido, r.material, r.texto, r.proveedor, r.solicitante, r.creadoPor].some(v => String(v || '').toLowerCase().includes(S.q))) return false;
+    return true;
+  };
+  const cuenta = k => { const c = {}; R.forEach(r => { if (ok(r, k)) { const v = r[k] || '(vacío)'; c[v] = (c[v] || 0) + 1; } }); return c; };
+  function opciones() {
+    SEL.forEach(([k, , todos]) => {
+      const c = cuenta(k), el = document.querySelector(`select[data-k="${k}"]`), cur = S.f[k] || '';
+      let ks = k === 'estado' ? ORD.filter(v => c[v]) : Object.keys(c).sort((a, b) => c[b] - c[a] || a.localeCompare(b));
+      if (cur && !ks.includes(cur)) ks.push(cur);
+      el.innerHTML = `<option value="">${todos}</option>` + ks.map(v => `<option value="${esc(v)}">${esc(v)} (${nf0.format(c[v] || 0)})</option>`).join('');
+      el.value = cur;
+    });
+    const c = cuenta('creadoPor'); S.cre.forEach(v => { if (!(v in c)) c[v] = 0; });
+    $('#msL').innerHTML = Object.keys(c).sort((a, b) => c[b] - c[a]).map(v => `<label><input type="checkbox" value="${esc(v)}" ${S.cre.has(v) ? 'checked' : ''}>${esc(v)} <span class="muted">(${nf0.format(c[v])})</span></label>`).join('');
+    $('#msS').textContent = S.cre.size === 0 ? 'Todos ▾' : S.cre.size === 1 ? [...S.cre][0] + ' ▾' : S.cre.size + ' seleccionados ▾';
+  }
+  function filas() {
+    const a = R.filter(r => ok(r)), k = S.sort, d = S.dir;
+    return a.sort((x, y) => { const u = x[k], v = y[k]; if (u == null || u === '') return 1; if (v == null || v === '') return -1; return (u > v ? 1 : u < v ? -1 : 0) * d; });
+  }
+  const celda = (r, k, n) => k === 'estado' ? `<span class="${stc(r[k])}">${esc(r[k])}</span>` : k === 'valorPEN' ? nf0.format(r[k] || 0) : n ? (r[k] == null ? '' : nf1.format(r[k])) : esc(r[k]);
+  function dibujar() {
+    opciones();
+    const a = filas(), ps = 200, pages = Math.max(1, Math.ceil(a.length / ps));
+    S.page = Math.min(S.page, pages - 1);
+    const est = {}; a.forEach(r => est[r.estado] = (est[r.estado] || 0) + 1);
+    $('#kp').innerHTML = `<div><span>Posiciones</span><b>${nf0.format(a.length)}</b></div><div><span>SOLPED</span><b>${nf0.format(new Set(a.map(r => r.solped)).size)}</b></div><div><span>Valor</span><b>${fS(a.reduce((t, r) => t + (r.valorPEN || 0), 0))}</b></div>` +
+      ORD.filter(e => est[e]).map(e => `<div><span>${e}</span><b>${nf0.format(est[e])}</b></div>`).join('');
+    const H = D.heads;
+    $('#tw').innerHTML = `<table><thead><tr>${H.map(h => `<th data-k="${h[0]}" class="${h[2] ? 'n' : ''}">${h[1]}${S.sort === h[0] ? (S.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${
+      a.slice(S.page * ps, S.page * ps + ps).map(r => '<tr>' + H.map(h => `<td class="${h[2] ? 'n' : (h[0] === 'texto' || h[0] === 'proveedor' ? 'wr' : '')}">${celda(r, h[0], h[2])}</td>`).join('') + '</tr>').join('')}</tbody></table>` +
+      (a.length ? '' : '<p style="padding:20px;text-align:center" class="muted">Sin registros para los filtros seleccionados.</p>');
+    $('#tw').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; S.dir = S.sort === k ? -S.dir : -1; S.sort = k; dibujar(); });
+    $('#pg').innerHTML = pages > 1 ? `<button class="btn" id="pp" ${S.page ? '' : 'disabled'}>‹</button><span>Página ${S.page + 1} de ${pages}</span><button class="btn" id="pn" ${S.page < pages - 1 ? '' : 'disabled'}>›</button>` : '';
+    if (pages > 1) { $('#pp').onclick = () => { S.page--; dibujar(); }; $('#pn').onclick = () => { S.page++; dibujar(); }; }
+  }
+  document.querySelectorAll('select[data-k]').forEach(el => el.onchange = () => { const k = el.dataset.k; if (el.value) S.f[k] = el.value; else delete S.f[k]; S.page = 0; dibujar(); });
+  $('#msL').onchange = e => { if (e.target.checked) S.cre.add(e.target.value); else S.cre.delete(e.target.value); S.page = 0; dibujar(); $('#ms').open = true; };
+  $('#de').onchange = e => { S.desde = e.target.value; S.page = 0; dibujar(); };
+  $('#ha').onchange = e => { S.hasta = e.target.value; S.page = 0; dibujar(); };
+  $('#q').oninput = e => { S.q = e.target.value.toLowerCase(); S.page = 0; dibujar(); };
+  $('#lim').onclick = () => { S.f = {}; S.cre.clear(); S.desde = S.hasta = S.q = ''; $('#de').value = $('#ha').value = $('#q').value = ''; S.page = 0; dibujar(); };
+  $('#csv').onclick = () => {
+    const a = filas(), q = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const t = '﻿' + D.heads.map(h => h[1]).join(';') + '\n' + a.map(r => D.heads.map(h => q(r[h[0]])).join(';')).join('\n');
+    const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' })); l.download = 'estatus_' + (D.area || 'todas') + '.csv'; l.click();
+  };
+  dibujar();
 }
 function csv() {
   const a = filasDetalle(), cols = DATA.pos.cols;
@@ -755,12 +852,56 @@ function dibujarCostos() {
 }
 
 /* ============================ CALIDAD ============================ */
+function diagnosticoHtml() {
+  const d = META.diag;
+  if (!d) return '<div class="alert info" style="margin-top:14px">Actualice Codigo.gs y vuelva a procesar para ver el diagnóstico de cruces.</div>';
+  const pc = x => x && x.oc ? x.ok / x.oc : null;
+  const cm = pc(d.cruceMat), cs = pc(d.cruceServ), co = pc(d.cruceME2N);
+  const R = {}; (d.rangos || []).forEach(r => R[r.fuente] = r);
+  const ocIni = (R['ME5A (fecha OC)'] || {}).desde, ingIni = (R['MB51 ingresos'] || {}).desde;
+  const m101 = ((d.mb51Mov || []).find(x => x.mov === 101) || {}).filas || 0;
+  const rec = [];
+  if (cm != null && cm < 0.8) {
+    if (ocIni && ingIni && dias(ocIni, ingIni) > 30)
+      rec.push(['bad', `<b>MB51 empieza tarde.</b> Los ingresos de MB51 empiezan el ${ingIni}, pero hay OC desde el ${ocIni}. Todas las OC anteriores quedan sin ingreso y salen «EN TRÁNSITO». Vuelva a extraer MB51 desde la misma fecha que ME5A.`]);
+    else
+      rec.push(['bad', `<b>MB51 incompleto.</b> Cubre el periodo, pero trae solo ${fN(m101)} filas de ingreso 101 para ${fN(d.cruceMat.oc)} posiciones de materiales con OC. Probable filtro en la extracción (almacén, material, usuario, grupo de artículos) o export cortado. Extraiga MB51 del centro PB03 sin filtros, solo por fecha y clases de movimiento.`]);
+  }
+  if (!d.me2nPorEntregar)
+    rec.push(['warn', `<b>Agregue «Por entregar (cantidad)» al layout de ME2N.</b> Con esa columna el estado (ATENDIDO, PARCIAL, EN TRÁNSITO) se calcula desde ME2N para materiales <i>y servicios</i>, aunque MB51 esté incompleto. MB51 queda solo para fechas de ingreso, consumos y costos.`]);
+  if (co != null && co < 0.9)
+    rec.push(['warn', `<b>ME2N no cubre todas las OC de ME5A</b> (${fP(co)}). Extraiga ME2N con el mismo rango de fechas que ME5A para ver proveedores y valores de OC.`]);
+  if (!rec.length) rec.push(['info', 'Los cruces entre transacciones están en niveles normales.']);
+  setTimeout(() => {
+    const t = d.cruceTri || [];
+    grafico('chTri', { type: 'bar', data: { labels: t.map(x => x.tri), datasets: [{ label: '% con ingreso en MB51', data: t.map(x => +(x.ok / x.oc * 100).toFixed(1)), backgroundColor: t.map(x => x.ok / x.oc >= .8 ? '#1f8a4c' : x.ok / x.oc >= .5 ? '#d9a400' : '#c43c3c') }] },
+      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: c => fN(t[c.dataIndex].ok) + ' de ' + fN(t[c.dataIndex].oc) + ' posiciones' } } }, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } } } });
+  }, 0);
+  return `<div class="sec">Diagnóstico de cruces</div>
+  <div class="grid k6">
+    ${kpi('ME5A → ME2N', fP(co), fN(d.cruceME2N.ok) + ' de ' + fN(d.cruceME2N.oc) + ' posiciones con OC', semaforo(co, .9, true), 'meta ≥ 90%')}
+    ${kpi('Materiales → ingreso MB51', fP(cm), fN(d.cruceMat.ok) + ' de ' + fN(d.cruceMat.oc), semaforo(cm, .85, true), 'meta ≥ 85%')}
+    ${kpi('Servicios → ingreso', fP(cs), d.me2nPorEntregar ? 'estado desde ME2N «Por entregar»' : 'sin «Por entregar» en ME2N', d.me2nPorEntregar ? '' : 'warn')}
+    ${kpi('Pedidos con ingreso en MB51', fN(d.pedidosMB51), fN(m101) + ' filas de mov. 101')}
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Mejora recomendada</h3><p class="note">Generada a partir de los cruces de esta carga</p>
+    ${rec.map(([c, t]) => `<div class="alert ${c === 'warn' ? '' : c}">${t}</div>`).join('')}</div>
+  <div class="grid c3" style="margin-top:14px">
+    <div class="card"><h3>Rango de fechas por fuente</h3><p class="note">Deben cubrir el mismo periodo</p>
+    ${tabla([{ t: 'Fuente', k: 'fuente' }, { t: 'Desde', k: 'desde' }, { t: 'Hasta', k: 'hasta' }], d.rangos || [])}</div>
+    ${card('chTri', 'Cruce con MB51 por trimestre de la OC', 'Materiales; verde ≥ 80%, rojo < 50%')}
+    <div class="card"><h3>MB51 por clase de movimiento</h3><p class="note">Filas leídas</p>
+    ${tabla([{ t: 'Clase', k: 'mov' }, { t: 'Filas', n: 1, f: r => fN(r.filas) }], d.mb51Mov || [])}</div>
+  </div>`;
+}
+const dias = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 function pCalidad() {
   const s = sec('calidad'), f = META.fuentes || {};
   s.innerHTML = `
   <div class="grid k6">
     ${['ME5A', 'ME2N', 'MB51', 'MB52', 'MM60'].map(t => kpi(t, fN(f[t] || 0), 'filas leídas', f[t] ? 'good' : 'bad')).join('')}
   </div>
+  ${diagnosticoHtml()}
   <div class="sec">Advertencias del último proceso</div>
   <div class="card">${(META.advertencias || []).length ? META.advertencias.map(a => `<div class="alert">${esc(a)}</div>`).join('') : '<div class="empty">Sin advertencias.</div>'}</div>
   <div class="sec">Solicitantes sin área</div>
