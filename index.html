@@ -73,7 +73,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 #dt td{white-space:nowrap}#dt td:nth-child(5),#dt td:nth-child(16){white-space:normal;min-width:200px}
 .ms{position:relative}.ms-pan{position:absolute;z-index:30;top:calc(100% + 4px);left:0;width:280px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(20,24,40,.15);padding:8px}
 .ms-pan input{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px}.ms-act{display:flex;gap:6px;margin:6px 0}.ms-act .btn{padding:3px 10px;font-size:12px}
-.ms-list{max-height:260px;overflow:auto}.ms-list input{min-width:0!important;width:auto;margin:0}#ct td{white-space:nowrap}#ct td:nth-child(2),#ct td:nth-child(7){white-space:normal;min-width:180px}.ms-list label{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}.ms-list label:hover{background:var(--soft)}.ms-list label span:first-of-type{flex:1}
+.ms-list{max-height:260px;overflow:auto}.ms-list input{min-width:0!important;width:auto;margin:0}#ct td{white-space:nowrap}#ct td:nth-child(2),#ct td:nth-child(4),#ct td:nth-child(8){white-space:normal;min-width:160px}.ms-list label{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}.ms-list label:hover{background:var(--soft)}.ms-list label span:first-of-type{flex:1}
 .pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px;font-size:12px}
 @media (max-width:640px){header,nav,.filters,main{padding-left:16px;padding-right:16px}.kpi .val{font-size:22px}}
 </style>
@@ -110,6 +110,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <label>Solicitud desde<input type="date" id="fDesde"></label>
   <label>hasta<input type="date" id="fHasta"></label>
   <button class="clr" id="btnLimpiar">Limpiar filtros</button>
+  <span class="muted" id="fNota" style="font-size:12px;align-self:center"></span>
 </div>
 <main id="app">
   <section data-p="resumen"></section>
@@ -156,7 +157,7 @@ const ls = {
 };
 
 /* ---------------------------- Estado ---------------------------- */
-let DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
+let MAT = new Map(), DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
 const charts = {};
 const $ = s => document.querySelector(s);
 const ESTADOS = ['SIN OC/OS', 'OC POR LIBERAR', 'EN TRANSITO', 'PARCIAL', 'ATENDIDO'];
@@ -272,6 +273,7 @@ function aObjetos(t) { return (t && t.rows || []).map(r => { const o = {}; t.col
 function iniciar(d) {
   DATA = d; META = d.meta || {};
   POS = aObjetos(d.pos); STK = aObjetos(d.stock); CONS = aObjetos(d.consumo);
+  MAT = new Map(((d.matArea && d.matArea.rows) || []).map(r => [String(r[0]), String(r[1] || '').split('|').filter(Boolean)]));
   const per = META.periodo || {};
   $('#hdrFecha').textContent = 'Datos al ' + (META.fechaCorte || '—') + (META.corteOrigen === 'CONFIG' ? ' (fijado en CONFIG)' : '') + ' · procesado ' + (META.generado || '—');
   $('#hdrSub').textContent = 'Mantenimiento — ' + fN(POS.length) + ' posiciones · SOLPED del ' + (per.desde || META.fechaDesde || '—') + ' al ' + (per.hasta || META.fechaCorte || '—');
@@ -327,10 +329,22 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { TAB =
 function render() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === TAB));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('hide', s.dataset.p !== TAB));
+  mostrarFiltros();
   if (!DATA) return;
   ({ resumen: pResumen, compras: pCompras, abast: pAbast, prov: pProv, inv: pInv, detalle: pDetalle, costos: pCostos, calidad: pCalidad })[TAB]();
 }
 const sec = id => document.querySelector(`section[data-p="${id}"]`);
+const areasDe = m => MAT.get(String(m)) || [];
+const deArea = (m, area) => !area || areasDe(m).includes(area);
+/* Qué filtros globales aplican en cada pestaña */
+const FILTROS_TAB = { inv: ['fArea'], costos: [], calidad: [] };
+function mostrarFiltros() {
+  const vis = FILTROS_TAB[TAB];
+  const ids = Object.keys(FMAP).concat(['fDesde', 'fHasta']);
+  $('#filters').classList.toggle('hide', vis !== undefined && vis.length === 0);
+  ids.forEach(id => $('#' + id).closest('label').classList.toggle('hide', vis !== undefined && !vis.includes(id)));
+  $('#fNota').textContent = TAB === 'inv' ? 'En Inventario solo aplica el Área: muestra los materiales que el área solicitó (ME5A) o consumió (MB51).' : '';
+}
 
 /* ---------------------------- Componentes ---------------------------- */
 function kpi(lbl, val, det, cls, metaTxt) {
@@ -561,20 +575,21 @@ function pInv() {
     s.innerHTML = `<div class="alert info">No hay datos de MB52. Pegue el stock por almacén (MB52) y el maestro (MM60) en el Google Sheet y vuelva a procesar para ver valor de inventario, cobertura y materiales sin movimiento.</div>`;
     return;
   }
-  const conStock = STK.filter(r => r.libre > 0);
+  const area = $('#fArea').value;
+  const STKa = STK.filter(r => deArea(r.material, area));
+  const conStock = STKa.filter(r => r.libre > 0);
   const vTot = sum(conStock, 'valor');
   const sinMov = conStock.filter(r => r.sinMov);
   const vSin = sum(sinMov, 'valor');
   const cob = conStock.map(r => r.cobertura).filter(v => v != null);
   const cMin = M('META_COBERTURA_MIN') || 30, cMax = M('META_COBERTURA_MAX') || 90;
   const buck = [['Sin consumo ' + (META.ventanaConsumo || 90) + ' d', r => r.cobertura == null], ['< ' + cMin + ' d', r => r.cobertura != null && r.cobertura < cMin], [cMin + '–' + cMax + ' d', r => r.cobertura >= cMin && r.cobertura <= cMax], ['> ' + cMax + ' d', r => r.cobertura > cMax]];
-  const area = $('#fArea').value;
   const cons = CONS.filter(r => !area || r.area === area);
-  const conCompra = FILT.filter(r => r.alertaStock);
+  const conCompra = POS.filter(r => r.alertaStock && (!area || r.area === area));
   const mes3 = [...new Set(cons.map(r => r.mes))].filter(m => m <= (META.fechaCorte || '9999').slice(0, 7)).sort().slice(-3);
   s.innerHTML = `
   <div class="grid k6">
-    ${kpi('Valor de stock libre', fS(vTot), fN(conStock.length) + ' materiales con stock')}
+    ${kpi('Valor de stock libre', fS(vTot), fN(conStock.length) + ' materiales con stock' + (area ? ' vinculados a ' + esc(area) : ''))}
     ${kpi('Stock sin movimiento', fP(vTot ? vSin / vTot : null), fS(vSin) + ' · ' + fN(sinMov.length) + ' materiales sin consumo > ' + (META.diasLento || 180) + ' d', semaforo(vTot ? vSin / vTot : null, M('META_SIN_MOV')), M('META_SIN_MOV') != null ? 'meta ≤ ' + fP(M('META_SIN_MOV')) : '')}
     ${kpi('Cobertura mediana', fD(med(cob)), 'stock / consumo diario de ' + (META.ventanaConsumo || 90) + ' d', med(cob) == null ? '' : (med(cob) < cMin ? 'warn' : (med(cob) > cMax ? 'warn' : 'good')), 'sano ' + cMin + '–' + cMax + ' d')}
     ${kpi('Consumo últimos 3 meses', fS(sum(cons.filter(r => mes3.includes(r.mes)), 'valorPEN')), mes3.map(mesTxt).join(', ') + (area ? ' · ' + esc(area) : ' · todas las áreas'))}
@@ -802,47 +817,89 @@ function csv() {
 }
 
 /* ============================ COSTOS (historial) ============================ */
-let CST = { q: '', sort: 'costoMax', dir: -1, page: 0, solo: '' };
-const CCOLS = [['material', 'Material'], ['texto', 'Texto breve'], ['um', 'UM'], ['costoMax', 'Costo máx. S/', 1], ['fechaMax', 'Fecha costo máx.'], ['docMax', 'Documento'], ['fuenteMax', 'Fuente'], ['costoUlt', 'Último costo S/', 1], ['fechaUlt', 'Fecha último'], ['var', 'Último vs máx.', 1], ['alta', 'Registrado'], ['actualizado', 'Actualizado'], ['nCambios', 'N° alzas', 1]];
+let CST = { q: '', sort: 'costoMax', dir: -1, page: 0, solo: '', area: '', fuente: '', prov: '', de: '', ha: '' };
+const CCOLS = [['material', 'Material'], ['texto', 'Texto breve'], ['um', 'UM'], ['areas', 'Áreas'], ['costoMax', 'Costo máx. S/', 1], ['fechaMax', 'Fecha costo máx.'], ['docMax', 'Documento'], ['prov', 'Proveedor'], ['costoUlt', 'Último costo S/', 1], ['fechaUlt', 'Fecha último'], ['var', 'Último vs máx.', 1], ['nCambios', 'N° alzas', 1], ['ultAlza', 'Última alza'], ['alta', 'Registrado']];
 function pCostos() {
   const s = sec('costos');
   const H = aObjetos(DATA.historial || { cols: [], rows: [] });
   if (!H.length) { s.innerHTML = `<div class="alert info">Aún no hay historial de costos. Se crea al ejecutar «Procesar datos» con el script actualizado (hoja HISTORIAL_COSTOS).</div>`; return; }
-  H.forEach(r => r.var = r.costoMax ? (r.costoUlt - r.costoMax) / r.costoMax : null);
-  const hoy = (META.fechaCorte || '').slice(0, 7);
-  const nuevos = H.filter(r => (r.alta || '').slice(0, 7) === hoy).length;
-  const alzas = H.filter(r => (r.actualizado || '').slice(0, 7) === hoy && r.nCambios > 0).length;
+  H.forEach(r => {
+    r.var = r.costoMax ? (r.costoUlt - r.costoMax) / r.costoMax : null;
+    const f = String(r.fuenteMax || '');
+    r.fuente = f.startsWith('MB51') ? 'Ingreso MB51' : f.startsWith('ME2N') ? 'Pedido ME2N' : 'Otra';
+    r.prov = f.includes(' · ') ? f.split(' · ').slice(1).join(' · ') : '';
+    r.areasL = areasDe(r.material); r.areas = r.areasL.join(', ');
+  });
+  CST.H = H;
+  CST.fp = (DATA.historial && DATA.historial.fechaProceso) || (META.generado || '').slice(0, 10);
   if (!s.dataset.ok) {
-    s.innerHTML = `<div class="grid k6" id="cK"></div><div class="sec">Historial de costos por material</div><div class="card"><div class="tools">
-      <input id="cq" placeholder="Buscar material o texto…">
-      <select id="cSolo" class="btn"><option value="">Todos los materiales</option><option value="nuevo">Registrados este mes</option><option value="alza">Con alza este mes</option><option value="baja">Último costo bajo el máximo</option></select>
-      <span class="muted" id="cn"></span><span style="flex:1"></span><button class="btn" id="ccsv">Descargar CSV</button></div><div id="ct"></div><div class="pager" id="cp"></div></div>`;
+    s.innerHTML = `<div class="filters" style="margin:-20px -24px 16px;border-top:0">
+        <label>Buscar<input id="cq" placeholder="Material o texto…"></label>
+        <label>Área<select id="cArea"></select></label>
+        <label>Situación<select id="cSolo"><option value="">Todos</option><option value="nuevo">Nuevos en la última carga</option><option value="alzaUlt">Con alza en la última carga</option><option value="alza">Con alzas en el historial</option><option value="baja">Último costo bajo el máximo</option></select></label>
+        <label>Fuente del costo máx.<select id="cFuente"></select></label>
+        <label>Proveedor<select id="cProv"></select></label>
+        <label>Último costo desde<input type="date" id="cDe"></label><label>hasta<input type="date" id="cHa"></label>
+        <button class="clr" id="cLim">Limpiar filtros</button></div>
+      <div class="grid k6" id="cK"></div>
+      <div class="sec">Historial de costos por material</div>
+      <div class="card"><p class="note">Costo unitario en soles. «Costo máx.» solo sube cuando llega una compra más cara; «Último costo» es la compra más reciente. Área = áreas que solicitaron o consumieron el material.</p>
+      <div class="tools"><span class="muted" id="cn"></span><span style="flex:1"></span><button class="btn" id="ccsv">Descargar CSV</button></div><div id="ct"></div><div class="pager" id="cp"></div></div>`;
     s.dataset.ok = 1;
-    $('#cq').oninput = e => { CST.q = e.target.value.toLowerCase(); CST.page = 0; dibujarCostos(); };
-    $('#cSolo').onchange = e => { CST.solo = e.target.value; CST.page = 0; dibujarCostos(); };
+    const re = () => { CST.page = 0; dibujarCostos(); };
+    $('#cq').oninput = e => { CST.q = e.target.value.toLowerCase(); re(); };
+    [['cArea', 'area'], ['cSolo', 'solo'], ['cFuente', 'fuente'], ['cProv', 'prov'], ['cDe', 'de'], ['cHa', 'ha']].forEach(([id, k]) => $('#' + id).onchange = e => { CST[k] = e.target.value; re(); });
+    $('#cLim').onclick = () => { Object.assign(CST, { q: '', solo: '', area: '', fuente: '', prov: '', de: '', ha: '' }); ['cq', 'cSolo', 'cDe', 'cHa'].forEach(id => $('#' + id).value = ''); re(); };
     $('#ccsv').onclick = () => { const a = filasCostos(); const q = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
       descargar('historial_costos_' + (META.fechaCorte || '') + '.csv', '﻿' + CCOLS.map(c => c[1]).join(';') + '\n' + a.map(r => CCOLS.map(c => q(r[c[0]])).join(';')).join('\n'), 'text/csv;charset=utf-8'); };
   }
-  $('#cK').innerHTML = kpi('Materiales en historial', fN(H.length), 'acumulado desde la primera carga') +
-    kpi('Nuevos este mes', fN(nuevos), 'materiales registrados por primera vez') +
-    kpi('Con alza de costo este mes', fN(alzas), 'superaron su costo máximo anterior', alzas ? 'warn' : '');
-  CST.H = H;
   dibujarCostos();
 }
+function cumpleCosto(r, sin) {
+  const fp = CST.fp;
+  if (CST.q && !(r.material + ' ' + r.texto).toLowerCase().includes(CST.q)) return false;
+  if (sin !== 'area' && CST.area && !(CST.area === '(sin área)' ? !r.areasL.length : r.areasL.includes(CST.area))) return false;
+  if (sin !== 'fuente' && CST.fuente && r.fuente !== CST.fuente) return false;
+  if (sin !== 'prov' && CST.prov && (r.prov || '(sin proveedor)') !== CST.prov) return false;
+  if (CST.de && (r.fechaUlt || '') < CST.de) return false;
+  if (CST.ha && (r.fechaUlt || '') > CST.ha) return false;
+  if (CST.solo === 'nuevo' && r.alta !== fp) return false;
+  if (CST.solo === 'alzaUlt' && r.ultAlza !== fp) return false;
+  if (CST.solo === 'alza' && !(r.nCambios > 0)) return false;
+  if (CST.solo === 'baja' && !(r.var < -0.001)) return false;
+  return true;
+}
+function opcionesCosto(id, k, todos, valoresDe) {
+  const c = {}; CST.H.forEach(r => { if (cumpleCosto(r, k)) valoresDe(r).forEach(v => c[v] = (c[v] || 0) + 1); });
+  const el = $('#' + id), cur = CST[k];
+  const ks = Object.keys(c).sort((a, b) => c[b] - c[a] || a.localeCompare(b));
+  if (cur && !ks.includes(cur)) { ks.push(cur); c[cur] = 0; }
+  el.innerHTML = `<option value="">${todos}</option>` + ks.map(v => `<option value="${esc(v)}">${esc(v)} (${fN(c[v])})</option>`).join('');
+  el.value = cur;
+}
 function filasCostos() {
-  const q = CST.q, hoy = (META.fechaCorte || '').slice(0, 7);
-  let a = (CST.H || []).filter(r => (!q || (r.material + ' ' + r.texto).toLowerCase().includes(q)) &&
-    (!CST.solo || (CST.solo === 'nuevo' && (r.alta || '').slice(0, 7) === hoy) || (CST.solo === 'alza' && (r.actualizado || '').slice(0, 7) === hoy && r.nCambios > 0) || (CST.solo === 'baja' && r.var < -0.001)));
+  let a = CST.H.filter(r => cumpleCosto(r));
   const k = CST.sort, d = CST.dir;
   a.sort((x, y) => { const u = x[k], v = y[k]; if (u == null || u === '') return 1; if (v == null || v === '') return -1; return (u > v ? 1 : u < v ? -1 : 0) * d; });
   return a;
 }
 function dibujarCostos() {
-  const a = filasCostos(), ps = 100, pages = Math.max(1, Math.ceil(a.length / ps));
+  opcionesCosto('cArea', 'area', 'Todas', r => r.areasL.length ? r.areasL : ['(sin área)']);
+  opcionesCosto('cFuente', 'fuente', 'Todas', r => [r.fuente]);
+  opcionesCosto('cProv', 'prov', 'Todos', r => [r.prov || '(sin proveedor)']);
+  const a = filasCostos(), ps = 100, pages = Math.max(1, Math.ceil(a.length / ps)), fp = CST.fp;
+  const primera = CST.H.every(r => r.alta === fp);
+  const nNuevos = a.filter(r => r.alta === fp).length, nAlz = a.filter(r => r.ultAlza === fp).length, nAlzH = a.filter(r => r.nCambios > 0).length;
+  $('#cK').innerHTML = kpi('Materiales', fN(a.length), 'de ' + fN(CST.H.length) + ' en el historial') +
+    kpi(primera ? 'Registrados (primera carga)' : 'Nuevos en la última carga', fN(nNuevos), 'carga del ' + esc(fp)) +
+    kpi('Con alza en la última carga', fN(nAlz), 'superaron su costo máximo anterior', nAlz ? 'warn' : '') +
+    kpi('Con alzas en el historial', fN(nAlzH), 'materiales que subieron al menos una vez') +
+    kpi('Último costo bajo el máximo', fN(a.filter(r => r.var < -0.001).length), 'oportunidad de negociar con la referencia más baja');
   CST.page = Math.min(CST.page, pages - 1);
   const pg = a.slice(CST.page * ps, CST.page * ps + ps);
   $('#cn').textContent = fN(a.length) + ' materiales';
-  const cel = (r, k) => k === 'costoMax' || k === 'costoUlt' ? (r[k] == null ? '' : 'S/ ' + r[k].toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+  const money = v => v == null ? '' : 'S/ ' + Number(v).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cel = (r, k) => k === 'costoMax' || k === 'costoUlt' ? money(r[k])
     : k === 'var' ? (r.var == null ? '' : `<span style="color:${r.var < -0.001 ? '#1f8a4c' : '#5b6475'}">${fP(r.var)}</span>`) : k === 'nCambios' ? fN(r[k]) : esc(r[k]);
   $('#ct').innerHTML = `<div class="tw" style="max-height:620px"><table><thead><tr>${CCOLS.map(c => `<th data-k="${c[0]}" class="${c[2] ? 'n' : ''}">${c[1]}${CST.sort === c[0] ? (CST.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${pg.map(r => '<tr>' + CCOLS.map(([k, , n]) => `<td class="${n ? 'n' : ''}">${cel(r, k)}</td>`).join('') + '</tr>').join('')}</tbody></table></div>`;
   $('#ct').querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; CST.dir = CST.sort === k ? -CST.dir : -1; CST.sort = k; dibujarCostos(); });
