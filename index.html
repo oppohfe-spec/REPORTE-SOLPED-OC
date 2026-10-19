@@ -708,12 +708,12 @@ function descargar(nombre, contenido, tipo) {
 function descargarHtmlDetalle() {
   const area = $('#fArea').value;
   const base = area ? POS.filter(r => (r.area || '(vacío)') === area) : POS.slice();
-  const keys = DCOLS.map(c => c[0]).filter(k => !(area && k === 'area'));
+  const keys = DCOLS.map(c => c[0]).filter(k => !(area && k === 'area')).concat(['posPed']);
   const ini = { tipo: $('#fTipo').value, estado: $('#fEstado').value, gasto: $('#fGasto').value, urgencia: $('#fUrg').value,
     comprador: $('#fComp').value, solicitante: $('#fSol').value, desde: $('#fDesde').value, hasta: $('#fHasta').value,
     q: DET.q, creados: [...DET.creados] };
   const datos = { area: area, corte: META.fechaCorte || '', generado: META.generado || '', descargado: new Date().toLocaleString('es-PE'),
-    cols: keys, heads: keys.map(k => DCOLS.find(c => c[0] === k)), rows: base.map(r => keys.map(k => r[k] == null ? null : r[k])), ini: ini };
+    cols: keys, heads: keys.filter(k => DCOLS.some(c => c[0] === k)).map(k => DCOLS.find(c => c[0] === k)), rows: base.map(r => keys.map(k => r[k] == null ? null : r[k])), ini: ini };
   const json = JSON.stringify(datos).replace(/</g, '\\u003c');
   const titulo = 'Estatus SOLPED · ' + (area || 'Todas las áreas') + ' · ' + (META.fechaCorte || '');
   const css = `:root{--b:#3b2a6b;--l:#e3e6ec;--s:#f0f2f6;--t:#5b6475}*{box-sizing:border-box}body{font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2330;margin:0;background:#f5f6f8}
@@ -730,11 +730,29 @@ main{padding:16px 20px}.k{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12p
 th{background:var(--s);position:sticky;top:0;cursor:pointer;color:var(--t);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}td.wr{white-space:normal;min-width:200px}
 .st{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}.st-SIN{background:#f9e3e3;color:#a12f2f}.st-POR{background:#fde9d6;color:#a65300}.st-TRA{background:#fbf1d9;color:#8a6200}.st-PAR{background:#e3edfc;color:#2457b3}.st-ATE{background:#e5f4ec;color:#1f7a45}
 .pg{display:flex;gap:6px;justify-content:flex-end;align-items:center;margin-top:8px;font-size:12px}.muted{color:var(--t)}
-@media print{.bar,.pg{display:none}.w{max-height:none;overflow:visible}th{position:static}body{background:#fff}}`;
+#pr{display:none}
+@page{size:A4 landscape;margin:9mm 8mm 11mm}
+@page{@bottom-right{content:"Página " counter(page) " de " counter(pages);font:8pt system-ui,Arial,sans-serif;color:#5b6475}}
+@media print{
+ *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ body{background:#fff;font-size:8pt}header,.bar,main{display:none!important}
+ #pr{display:block}
+ .ph{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3b2a6b;padding-bottom:5px;margin-bottom:6px}
+ .ph h1{font-size:14pt;color:#3b2a6b;margin:0}.ph .ar{font-size:12pt;font-weight:700;color:#1d2330}.ph .meta{font-size:7.5pt;color:#5b6475;text-align:right}
+ .pf{font-size:7.5pt;color:#1d2330;margin:0 0 6px}.pf b{color:#3b2a6b}
+ .pk{display:flex;gap:6px;margin:0 0 7px}.pk div{border:1px solid #d5d9e2;border-radius:5px;padding:3px 8px;min-width:70px}.pk span{display:block;font-size:6.5pt;color:#5b6475;text-transform:uppercase}.pk b{font-size:10.5pt}
+ table.pt{width:100%;border-collapse:collapse;table-layout:fixed}
+ .pt th{background:#3b2a6b!important;color:#fff;font-size:7pt;font-weight:600;padding:3px 3px;text-align:left;border:0;position:static;white-space:normal}
+ .pt td{font-size:7pt;padding:2.5px 3px;border-bottom:.5px solid #d5d9e2;vertical-align:top;white-space:normal;word-wrap:break-word;overflow-wrap:anywhere}
+ .pt tr:nth-child(even) td{background:#f5f6f9}.pt tr{page-break-inside:avoid;break-inside:avoid}.pt thead{display:table-header-group}
+ .pt td.n,.pt th.n{text-align:right;font-variant-numeric:tabular-nums}.pt .sm{color:#5b6475;font-size:6.5pt}
+ .pt .st{font-size:6.5pt;padding:1px 4px}
+ .pn{margin-top:6px;font-size:7pt;color:#5b6475}
+}`;
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titulo)}</title><style>${css}</style></head><body>
 <header><h1>Estatus de SOLPED · OC · Ingreso${area ? `<span class="fx">Área: ${esc(area)}</span>` : ''}</h1>
 <div>Mantenimiento — HFE Berries Olmos · Datos al ${esc(META.fechaCorte || '—')} · Procesado ${esc(META.generado || '—')} · Generado ${esc(new Date().toLocaleString('es-PE'))}</div></header>
-<div class="bar" id="bar"></div><main><div class="k" id="kp"></div><div class="w" id="tw"></div><div class="pg" id="pg"></div></main>
+<div class="bar" id="bar"></div><main><div class="k" id="kp"></div><div class="w" id="tw"></div><div class="pg" id="pg"></div></main><div id="pr"></div>
 <script>window.__D=${json};<\/script><script>(${reporteApp.toString()})();<\/script></body></html>`;
   descargar('estatus_' + (area || 'todas').replace(/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+/g, '_') + '_' + (META.fechaCorte || '') + '.html', html, 'text/html;charset=utf-8');
 }
@@ -755,7 +773,7 @@ function reporteApp() {
     `<label>Creado por<details class="ms" id="ms"><summary id="msS"></summary><div class="p" id="msL"></div></details></label>
      <label>Solicitud desde<input type="date" id="de" value="${esc(S.desde)}"></label><label>hasta<input type="date" id="ha" value="${esc(S.hasta)}"></label>
      <label>Buscar<input id="q" placeholder="SOLPED, OC, material, texto…" value="${esc(S.q)}"></label>
-     <button class="btn" id="lim">Limpiar filtros</button><button class="btn" id="csv">Descargar CSV</button><button class="btn" onclick="print()">Imprimir / PDF</button>`;
+     <button class="btn" id="lim">Limpiar filtros</button><button class="btn" id="csv">Descargar CSV</button><button class="btn" id="imp">Imprimir / PDF</button>`;
   const ok = (r, sin) => {
     for (const k in S.f) if (k !== sin && (r[k] || '(vacío)') !== S.f[k]) return false;
     if (sin !== 'creadoPor' && S.cre.size && !S.cre.has(r.creadoPor || '(vacío)')) return false;
@@ -808,6 +826,43 @@ function reporteApp() {
     const t = '﻿' + D.heads.map(h => h[1]).join(';') + '\n' + a.map(r => D.heads.map(h => q(r[h[0]])).join(';')).join('\n');
     const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' })); l.download = 'estatus_' + (D.area || 'todas') + '.csv'; l.click();
   };
+  /* Vista de impresión: todas las filas filtradas (no solo la página), A4 horizontal, columnas agrupadas para que entren todas */
+  function vistaImpresion() {
+    const a = filas(), est = {}; a.forEach(r => est[r.estado] = (est[r.estado] || 0) + 1);
+    const lbl = { tipo: 'Tipo', estado: 'Estado', urgencia: 'Urgencia', gasto: 'Gasto', solicitante: 'Solicitante', comprador: 'Comprador' };
+    const fil = Object.keys(S.f).map(k => `<b>${lbl[k]}:</b> ${esc(S.f[k])}`);
+    if (S.cre.size) fil.push(`<b>Creado por:</b> ${esc([...S.cre].join(', '))}`);
+    if (S.desde) fil.push(`<b>Desde:</b> ${esc(S.desde)}`);
+    if (S.hasta) fil.push(`<b>Hasta:</b> ${esc(S.hasta)}`);
+    if (S.q) fil.push(`<b>Búsqueda:</b> ${esc(S.q)}`);
+    const d = v => v ? esc(v) : '<span class="sm">—</span>';
+    const num = v => v == null || v === '' ? '' : nf1.format(v);
+    const C = [
+      ['SOLPED / Pos', 7.5, r => `${esc(r.solped)}<br><span class="sm">Pos ${esc(r.pos)}</span>`],
+      ['Fecha sol.', 6, r => d(r.fSol)],
+      ['Material / Texto breve', 19, r => `${r.material ? '<b>' + esc(r.material) + '</b><br>' : ''}${esc(r.texto)}`],
+      ['Solicitante / Creado por', 9, r => `${esc(r.solicitante)}<br><span class="sm">${esc(r.creadoPor)}</span>`],
+      ['Tipo / Urgencia', 7.5, r => `${esc(r.tipo)}<br><span class="sm">${esc(r.urgencia)}</span>`],
+      ['Cant.', 4.5, r => num(r.cant), 1],
+      ['Valor S/', 5.5, r => nf0.format(r.valorPEN || 0), 1],
+      ['OC/OS / Fecha', 9.5, r => r.pedido ? `${esc(r.pedido)} <span class="sm">· ${esc(r.posPed)}</span><br><span class="sm">${esc(r.fOC)}</span>` : '<span class="sm">Sin OC/OS</span>'],
+      ['Comprador / Proveedor', 10.5, r => `${esc(r.comprador)}${r.proveedor ? '<br><span class="sm">' + esc(r.proveedor) + '</span>' : ''}`],
+      ['Ingresado / Fecha', 6.5, r => `${num(r.cantIng)}${r.fIng ? '<br><span class="sm">' + esc(r.fIng) + '</span>' : ''}`, 1],
+      ['Estado', 7.5, r => `<span class="${stc(r.estado)}">${esc(r.estado)}</span>`],
+      ['Días SOL→OC / OC→ING', 6, r => `${num(r.dSolOC) || '—'} / ${num(r.dOCIng) || '—'}`, 1],
+      ['Antig. (d)', 4, r => num(r.antig), 1]
+    ];
+    $('#pr').innerHTML = `<div class="ph"><div><h1>Estatus de SOLPED · OC · Ingreso</h1><div class="ar">${D.area ? 'Área: ' + esc(D.area) : 'Todas las áreas'}</div></div>
+      <div class="meta">Mantenimiento — HFE Berries Olmos<br>Datos al ${esc(D.corte)} · Procesado ${esc(D.generado)}<br>Impreso ${esc(new Date().toLocaleString('es-PE'))}</div></div>
+      <p class="pf">${fil.length ? 'Filtros: ' + fil.join(' · ') : 'Sin filtros adicionales: todas las posiciones del área.'}</p>
+      <div class="pk"><div><span>Posiciones</span><b>${nf0.format(a.length)}</b></div><div><span>SOLPED</span><b>${nf0.format(new Set(a.map(r => r.solped)).size)}</b></div><div><span>Valor</span><b>${fS(a.reduce((t, r) => t + (r.valorPEN || 0), 0))}</b></div>${ORD.filter(e => est[e]).map(e => `<div><span>${e}</span><b>${nf0.format(est[e])}</b></div>`).join('')}</div>
+      <table class="pt"><colgroup>${C.map(c => `<col style="width:${c[1]}%">`).join('')}</colgroup>
+      <thead><tr>${C.map(c => `<th class="${c[3] ? 'n' : ''}">${c[0]}</th>`).join('')}</tr></thead>
+      <tbody>${a.map(r => '<tr>' + C.map(c => `<td class="${c[3] ? 'n' : ''}">${c[2](r)}</td>`).join('') + '</tr>').join('')}</tbody></table>
+      <p class="pn">${nf0.format(a.length)} posiciones · Antig. = días desde la SOLPED (sin OC) o desde la OC (en curso) a la fecha de datos.</p>`;
+  }
+  window.addEventListener('beforeprint', vistaImpresion);
+  $('#imp').onclick = () => { vistaImpresion(); window.print(); };
   dibujar();
 }
 function csv() {
