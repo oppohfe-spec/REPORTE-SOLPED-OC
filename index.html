@@ -37,7 +37,7 @@ main{padding:20px 24px 48px;max-width:1500px;margin:0 auto}
 .card h3{margin:0 0 2px;font-size:14px;font-weight:650}
 .card .note{font-size:12px;color:var(--ink2);margin:0 0 10px}
 .kpi{position:relative;padding:14px 16px 12px}
-.kpi .lbl{font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;gap:6px}
+.kpi .lbl{font-size:12px;color:var(--ink2);display:flex;justify-content:space-between;align-items:flex-start;gap:6px}.kpi .lbl .pill{flex-shrink:0;line-height:1.5}
 .kpi .val{font-size:26px;font-weight:700;margin:4px 0 2px;letter-spacing:-.3px}
 .kpi .det{font-size:12px;color:var(--ink2)}
 .kpi .bar{position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 4px 4px 0;background:var(--line)}
@@ -868,7 +868,7 @@ function diagnosticoHtml() {
       rec.push(['bad', `<b>MB51 incompleto.</b> Cubre el periodo, pero trae solo ${fN(m101)} filas de ingreso 101 para ${fN(d.cruceMat.oc)} posiciones de materiales con OC. Probable filtro en la extracción (almacén, material, usuario, grupo de artículos) o export cortado. Extraiga MB51 del centro PB03 sin filtros, solo por fecha y clases de movimiento.`]);
   }
   if (!d.me2nPorEntregar)
-    rec.push(['warn', `<b>Agregue «Por entregar (cantidad)» al layout de ME2N.</b> Con esa columna el estado (ATENDIDO, PARCIAL, EN TRÁNSITO) se calcula desde ME2N para materiales <i>y servicios</i>, aunque MB51 esté incompleto. MB51 queda solo para fechas de ingreso, consumos y costos.`]);
+    rec.push(['warn', `<b>Agregue «Por entregar (cantidad)» al layout de ME2N.</b> Con esa columna el estado (ATENDIDO, PARCIAL, EN TRÁNSITO) se calcula desde ME2N para materiales <i>y servicios</i>; hoy solo ${fP(cs)} de los servicios tiene ingreso visible porque las hojas de entrada de servicio no generan movimiento 101.<br><b>Cómo:</b> en ME2N use Alcance de lista <code>ALV</code> → ejecutar → <i>Modificar disposición</i> (Ctrl+F8) → agregue «Por entregar (cantidad)» (o «Cantidad entregada») → guarde la disposición y expórtela así en cada carga. No hace falta cambiar el script: la reconoce automáticamente.`]);
   if (co != null && co < 0.9)
     rec.push(['warn', `<b>ME2N no cubre todas las OC de ME5A</b> (${fP(co)}). Extraiga ME2N con el mismo rango de fechas que ME5A para ver proveedores y valores de OC.`]);
   if (!rec.length) rec.push(['info', 'Los cruces entre transacciones están en niveles normales.']);
@@ -897,6 +897,9 @@ function diagnosticoHtml() {
 const dias = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 function pCalidad() {
   const s = sec('calidad'), f = META.fuentes || {};
+  const gA = {}; POS.forEach(r => { if (r.area === 'SIN MAPEAR') { const u = r.solicitante || '(vacío)'; const x = gA[u] || (gA[u] = { u, n: 0, v: 0, ej: r.texto }); x.n++; x.v += r.valorPEN || 0; } });
+  const sinA = Object.values(gA).sort((a, b) => b.n - a.n);
+  const inc = POS.filter(r => r.inconsistente).sort((a, b) => a.fSol < b.fSol ? 1 : -1);
   s.innerHTML = `
   <div class="grid k6">
     ${['ME5A', 'ME2N', 'MB51', 'MB52', 'MM60'].map(t => kpi(t, fN(f[t] || 0), 'filas leídas', f[t] ? 'good' : 'bad')).join('')}
@@ -906,8 +909,9 @@ function pCalidad() {
   <div class="card">${(META.advertencias || []).length ? META.advertencias.map(a => `<div class="alert">${esc(a)}</div>`).join('') : '<div class="empty">Sin advertencias.</div>'}</div>
   <div class="sec">Solicitantes sin área</div>
   <div class="grid c2">
-    <div class="card"><h3>Agregar a MAESTRO_SOLICITANTES</h3><p class="note">Mientras no tengan área, sus posiciones aparecen como «SIN MAPEAR»</p>
-    ${tabla([{ t: 'Usuario SAP', k: 'usuario' }, { t: 'Posiciones', n: 1, f: r => fN(r.posiciones) }], META.sinArea || [])}</div>
+    <div class="card"><h3>Agregar a MAESTRO_SOLICITANTES</h3><p class="note">${fN(sinA.length)} usuarios · ${fN(sinA.reduce((t, x) => t + x.n, 0))} posiciones aparecen como «SIN MAPEAR». Descargue la lista, complete el área y péguela en la hoja (o use el menú «Agregar usuarios sin área al maestro»).</p>
+    <div class="tools"><button class="btn pri" id="csvSinArea">Descargar lista para completar</button></div>
+    ${tabla([{ t: 'Usuario SAP', k: 'u' }, { t: 'Posiciones', n: 1, f: r => fN(r.n) }, { t: 'Valor', n: 1, f: r => fS(r.v) }, { t: 'Ejemplo de solicitud', f: r => esc(r.ej) }], sinA)}</div>
     <div class="card"><h3>Reglas aplicadas</h3><p class="note">Configurables en la hoja CONFIG</p>
     <table><tbody>
       <tr><td>Fecha de corte</td><td>${esc(META.fechaCorte)}</td></tr>
@@ -918,7 +922,19 @@ function pCalidad() {
       <tr><td>Fechas inconsistentes</td><td>${fN(META.inconsistentes)} posiciones (excluidas de lead times)</td></tr>
       ${Object.entries(META.metas || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}
     </tbody></table></div>
-  </div>`;
+  </div>
+  <div class="sec">Posiciones con fechas inconsistentes</div>
+  <div class="card"><h3>${fN(inc.length)} posiciones para corregir en SAP o revisar</h3><p class="note">Se excluyen de los lead times. Motivo: la OC tiene fecha anterior a la SOLPED, o el ingreso es anterior a la OC (suele ser una OC creada después de recibir el material).</p>
+    <div class="tools"><button class="btn" id="csvInc">Descargar CSV</button></div>
+    ${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Fecha SOLPED', k: 'fSol' }, { t: 'OC/OS', f: r => esc(r.pedido) + '-' + esc(r.posPed) }, { t: 'Fecha OC', k: 'fOC' }, { t: 'Fecha ingreso', k: 'fIng' }, { t: 'Motivo', f: r => motivoInc(r) }, { t: 'Área', k: 'area' }, { t: 'Creado por', k: 'creadoPor' }, { t: 'Texto', k: 'texto' }], inc, { max: 300 })}</div>`;
+  $('#csvSinArea').onclick = () => descargar('solicitantes_sin_area.csv', '\ufeffUsuario SAP;Área;Posiciones;Ejemplo\n' + sinA.map(x => [x.u, '', x.n, '"' + String(x.ej).replace(/"/g, '""') + '"'].join(';')).join('\n'), 'text/csv;charset=utf-8');
+  $('#csvInc').onclick = () => descargar('fechas_inconsistentes.csv', '\ufeffSOLPED;Pos;Fecha SOLPED;OC;Pos OC;Fecha OC;Fecha ingreso;Motivo;Área;Creado por;Texto\n' +
+    inc.map(r => [r.solped, r.pos, r.fSol, r.pedido, r.posPed, r.fOC, r.fIng, motivoInc(r), r.area, r.creadoPor, '"' + String(r.texto || '').replace(/"/g, '""') + '"'].join(';')).join('\n'), 'text/csv;charset=utf-8');
+}
+function motivoInc(r) {
+  if (r.fOC && r.fOC < r.fSol) return 'OC antes de la SOLPED';
+  if (r.fIng && r.fOC && r.fIng < r.fOC) return 'Ingreso antes de la OC';
+  return 'Fecha inconsistente';
 }
 
 cargar(false);
