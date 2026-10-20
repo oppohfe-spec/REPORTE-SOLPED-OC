@@ -157,7 +157,7 @@ const ls = {
 };
 
 /* ---------------------------- Estado ---------------------------- */
-let MAT = new Map(), DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
+let MAT = new Map(), MAT_SCRIPT = false, DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
 const charts = {};
 const $ = s => document.querySelector(s);
 const ESTADOS = ['SIN OC/OS', 'OC POR LIBERAR', 'EN TRANSITO', 'PARCIAL', 'ATENDIDO'];
@@ -273,7 +273,15 @@ function aObjetos(t) { return (t && t.rows || []).map(r => { const o = {}; t.col
 function iniciar(d) {
   DATA = d; META = d.meta || {};
   POS = aObjetos(d.pos); STK = aObjetos(d.stock); CONS = aObjetos(d.consumo);
+  // Material → áreas: viene del script (ME5A + consumos MB51); se completa siempre con las SOLPED cargadas,
+  // así el filtro por área funciona aunque el Sheet se haya procesado con una versión anterior del script.
   MAT = new Map(((d.matArea && d.matArea.rows) || []).map(r => [String(r[0]), String(r[1] || '').split('|').filter(Boolean)]));
+  MAT_SCRIPT = !!(d.matArea && d.matArea.rows && d.matArea.rows.length);
+  POS.forEach(r => {
+    if (!r.material || !r.area || r.area === 'SIN MAPEAR' || r.area === 'SIN SOLICITANTE') return;
+    const k = String(r.material), l = MAT.get(k) || [];
+    if (!l.includes(r.area)) { l.push(r.area); MAT.set(k, l); }
+  });
   const per = META.periodo || {};
   $('#hdrFecha').textContent = 'Datos al ' + (META.fechaCorte || '—') + (META.corteOrigen === 'CONFIG' ? ' (fijado en CONFIG)' : '') + ' · procesado ' + (META.generado || '—');
   $('#hdrSub').textContent = 'Mantenimiento — ' + fN(POS.length) + ' posiciones · SOLPED del ' + (per.desde || META.fechaDesde || '—') + ' al ' + (per.hasta || META.fechaCorte || '—');
@@ -343,7 +351,7 @@ function mostrarFiltros() {
   const ids = Object.keys(FMAP).concat(['fDesde', 'fHasta']);
   $('#filters').classList.toggle('hide', vis !== undefined && vis.length === 0);
   ids.forEach(id => $('#' + id).closest('label').classList.toggle('hide', vis !== undefined && !vis.includes(id)));
-  $('#fNota').textContent = TAB === 'inv' ? 'En Inventario solo aplica el Área: muestra los materiales que el área solicitó (ME5A) o consumió (MB51).' : '';
+  $('#fNota').textContent = TAB === 'inv' ? 'En Inventario solo aplica el Área: muestra los materiales que el área solicitó (ME5A)' + (MAT_SCRIPT ? ' o consumió (MB51).' : '. Para sumar también los consumos de MB51, procese el Sheet con el Codigo.gs actualizado.') : '';
 }
 
 /* ---------------------------- Componentes ---------------------------- */
@@ -606,7 +614,8 @@ function pInv() {
     <div class="card"><h3>Compras abiertas con stock libre</h3><p class="note">Revisar si la SOLPED es necesaria</p>
     ${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Pendiente', n: 1, f: r => fN(r.cant - (r.cantIng || 0)) }, { t: 'Stock libre', n: 1, f: r => fN(r.stockLibre) }, { t: 'Estado', f: r => `<span class="${stCls(r.estado)}">${r.estado}</span>` }], conCompra, { max: 200 })}</div>
   </div>`;
-  grafico('chCob', { type: 'bar', data: { labels: buck.map(b => b[0]), datasets: [{ label: 'Valor', data: buck.map(b => Math.round(sum(conStock.filter(b[1]), 'valor'))), backgroundColor: ['#7a8597', '#d9a400', '#1f8a4c', '#e07b1a'] }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fS(c.raw) } } }, scales: { y: { ticks: { callback: v => fS(v) } } } } });
+  if (!conStock.length) { const c = document.getElementById('chCob'); if (c) c.parentElement.innerHTML = '<div class="empty">Ningún material con stock libre está vinculado a ' + esc(area || 'esta selección') + '.</div>'; }
+  else grafico('chCob', { type: 'bar', data: { labels: buck.map(b => b[0]), datasets: [{ label: 'Valor', data: buck.map(b => Math.round(sum(conStock.filter(b[1]), 'valor'))), backgroundColor: ['#7a8597', '#d9a400', '#1f8a4c', '#e07b1a'] }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fS(c.raw) } } }, scales: { y: { ticks: { callback: v => fS(v) } } } } });
   const meses = [...new Set(cons.map(r => r.mes))].sort().slice(-18);
   const areas = [...groupBy(cons.filter(r => meses.includes(r.mes)), 'area')].map(([a, rs]) => ({ a, v: sum(rs, 'valorPEN') })).sort((x, y) => y.v - x.v);
   const topA = areas.slice(0, 6).map(x => x.a);
