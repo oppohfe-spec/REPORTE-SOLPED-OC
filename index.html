@@ -74,6 +74,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .ms{position:relative}.ms-pan{position:absolute;z-index:30;top:calc(100% + 4px);left:0;width:280px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(20,24,40,.15);padding:8px}
 .ms-pan input{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px}.ms-act{display:flex;gap:6px;margin:6px 0}.ms-act .btn{padding:3px 10px;font-size:12px}
 .ms-list{max-height:260px;overflow:auto}.ms-list input{min-width:0!important;width:auto;margin:0}#ct td{white-space:nowrap}#ct td:nth-child(2),#ct td:nth-child(4),#ct td:nth-child(8){white-space:normal;min-width:160px}.ms-list label{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:12.5px}.ms-list label:hover{background:var(--soft)}.ms-list label span:first-of-type{flex:1}
+section[data-p="inv"] td.n,section[data-p="inv"] td:nth-last-child(-n+2){white-space:nowrap}
 .pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px;font-size:12px}
 @media (max-width:640px){header,nav,.filters,main{padding-left:16px;padding-right:16px}.kpi .val{font-size:22px}}
 </style>
@@ -157,7 +158,7 @@ const ls = {
 };
 
 /* ---------------------------- Estado ---------------------------- */
-let MAT = new Map(), MAT_SCRIPT = false, DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
+let INV = { q: '' }, MAT = new Map(), MAT_SCRIPT = false, DATA = null, POS = [], STK = [], CONS = [], META = {}, FILT = [];
 const charts = {};
 const $ = s => document.querySelector(s);
 const ESTADOS = ['SIN OC/OS', 'OC POR LIBERAR', 'EN TRANSITO', 'PARCIAL', 'ATENDIDO'];
@@ -588,7 +589,28 @@ function pInv() {
   const conStock = STKa.filter(r => r.libre > 0);
   const vTot = sum(conStock, 'valor');
   const sinMov = conStock.filter(r => r.sinMov);
-  const vSin = sum(sinMov, 'valor');
+  const tieneDisp = STK.length && STK[0].disp !== undefined, DR = META.diasRec != null ? META.diasRec : 30;
+  STKa.forEach(r => { if (!tieneDisp) { r.disp = r.libre; r.valorDisp = r.valor; r.reciente = 0; } });
+  const vDisp = sum(conStock, 'valorDisp'), vRec = vTot - vDisp;
+  const vSin = sum(sinMov, 'valorDisp');
+  // Stock total (libre + no liberado: control de calidad, bloqueado, traslado)
+  STKa.forEach(r => { if (r.total == null) { r.total = r.libre; r.valorTotal = r.valor; r.cal = r.bloq = r.trans = 0; } if (!r.areas) r.areas = areasDe(r.material).join(', '); });
+  const conTotal = STKa.filter(r => r.total > 0);
+  const vTotal = sum(conTotal, 'valorTotal'), vNoLib = vTotal - vTot;
+  // Recibido en los últimos N días por SOLPED, aún en almacén (para gestionar el retiro con el área que lo pidió)
+  const stkMap = new Map(STK.map(r => [String(r.material), r]));
+  const quedan = new Map();
+  const recibidos = POS.filter(r => r.ingReciente > 0 && r.material && stkMap.has(String(r.material)))
+    .sort((a, b) => (b.fIngUlt || '') < (a.fIngUlt || '') ? -1 : 1)
+    .map(r => {
+      const st = stkMap.get(String(r.material)), k = String(r.material);
+      if (!quedan.has(k)) quedan.set(k, st.libre + (st.cal || 0));
+      const enAlm = Math.max(0, Math.min(r.ingReciente, quedan.get(k)));
+      quedan.set(k, quedan.get(k) - enAlm);
+      const unit = st.libre > 0 ? st.valor / st.libre : 0;
+      return Object.assign({}, r, { enAlm, valAlm: enAlm * unit, dAlm: r.fIngUlt ? dias(r.fIngUlt, META.fechaCorte || r.fIngUlt) : null });
+    }).filter(r => r.enAlm > 0 && (!area || r.area === area));
+  INV.recibidos = recibidos; INV.mapa = conTotal;
   const cob = conStock.map(r => r.cobertura).filter(v => v != null);
   const cMin = M('META_COBERTURA_MIN') || 30, cMax = M('META_COBERTURA_MAX') || 90;
   const buck = [['Sin consumo ' + (META.ventanaConsumo || 90) + ' d', r => r.cobertura == null], ['< ' + cMin + ' d', r => r.cobertura != null && r.cobertura < cMin], [cMin + '–' + cMax + ' d', r => r.cobertura >= cMin && r.cobertura <= cMax], ['> ' + cMax + ' d', r => r.cobertura > cMax]];
@@ -597,7 +619,9 @@ function pInv() {
   const mes3 = [...new Set(cons.map(r => r.mes))].filter(m => m <= (META.fechaCorte || '9999').slice(0, 7)).sort().slice(-3);
   s.innerHTML = `
   <div class="grid k6">
-    ${kpi('Valor de stock libre', fS(vTot), fN(conStock.length) + ' materiales con stock' + (area ? ' vinculados a ' + esc(area) : ''))}
+    ${kpi('Stock total', fS(vTotal), fN(conTotal.length) + ' materiales · libre ' + fS(vTot) + (vNoLib > 0.5 ? ' · no liberado ' + fS(vNoLib) : '') + (area ? ' · vinculados a ' + esc(area) : ''))}
+    ${kpi('Recibido por SOLPED aún en almacén', fS(sum(recibidos, 'valAlm')), fN(recibidos.length) + ' posiciones ingresadas en los últimos ' + DR + ' d', recibidos.length ? 'warn' : '')}
+    ${kpi('Stock libre disponible', fS(vDisp), tieneDisp ? 'de ' + fS(vTot) + ' en MB52; ' + fS(vRec) + ' ingresó hace menos de ' + DR + ' d' : fN(conStock.length) + ' materiales con stock' + (area ? ' vinculados a ' + esc(area) : ''))}
     ${kpi('Stock sin movimiento', fP(vTot ? vSin / vTot : null), fS(vSin) + ' · ' + fN(sinMov.length) + ' materiales sin consumo > ' + (META.diasLento || 180) + ' d', semaforo(vTot ? vSin / vTot : null, M('META_SIN_MOV')), M('META_SIN_MOV') != null ? 'meta ≤ ' + fP(M('META_SIN_MOV')) : '')}
     ${kpi('Cobertura mediana', fD(med(cob)), 'stock / consumo diario de ' + (META.ventanaConsumo || 90) + ' d', med(cob) == null ? '' : (med(cob) < cMin ? 'warn' : (med(cob) > cMax ? 'warn' : 'good')), 'sano ' + cMin + '–' + cMax + ' d')}
     ${kpi('Consumo últimos 3 meses', fS(sum(cons.filter(r => mes3.includes(r.mes)), 'valorPEN')), mes3.map(mesTxt).join(', ') + (area ? ' · ' + esc(area) : ' · todas las áreas'))}
@@ -609,11 +633,27 @@ function pInv() {
     ${card('chCons', 'Consumo mensual valorizado' + (area ? ' · ' + area : ' por área'), 'Salidas 201/221/261 netas de reversas (MB51)')}
   </div>
   <div class="grid c2" style="margin-top:14px">
-    <div class="card"><h3>Mayor valor sin movimiento</h3><p class="note">Candidatos a revisión, traslado o baja</p>
-    ${tabla([{ t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Stock', n: 1, f: r => fN(r.libre) + ' ' + esc(r.um) }, { t: 'Valor', n: 1, f: r => fS(r.valor) }, { t: 'Último consumo', f: r => r.ultConsumo || '<span class="muted">sin registro</span>' }], sinMov.sort((a, b) => b.valor - a.valor), { max: 100 })}</div>
-    <div class="card"><h3>Compras abiertas con stock libre</h3><p class="note">Revisar si la SOLPED es necesaria</p>
-    ${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Pendiente', n: 1, f: r => fN(r.cant - (r.cantIng || 0)) }, { t: 'Stock libre', n: 1, f: r => fN(r.stockLibre) }, { t: 'Estado', f: r => `<span class="${stCls(r.estado)}">${r.estado}</span>` }], conCompra, { max: 200 })}</div>
-  </div>`;
+    <div class="card"><h3>Mayor valor sin movimiento</h3><p class="note">Stock disponible (ingresado hace más de ${DR} d) sin consumo; candidatos a revisión, traslado o baja</p>
+    ${tabla([{ t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Stock disp.', n: 1, f: r => fN(r.disp) + ' ' + esc(r.um) }, { t: 'Valor', n: 1, f: r => fS(r.valorDisp) }, { t: 'Último ingreso', f: r => r.ultIngreso || '<span class="muted">—</span>' }, { t: 'Último consumo', f: r => r.ultConsumo || '<span class="muted">sin registro</span>' }], sinMov.sort((a, b) => b.valorDisp - a.valorDisp), { max: 100 })}</div>
+    <div class="card"><h3>Compras abiertas con stock libre</h3><p class="note">Solo cuenta stock ingresado hace más de ${DR} días (lo reciente ya está comprometido con su SOLPED)</p>
+    ${tabla([{ t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Pendiente', n: 1, f: r => fN(r.cant - (r.cantIng || 0)) }, { t: 'Stock disp.', n: 1, f: r => fN(r.stockLibre) }, { t: 'Estado', f: r => `<span class="${stCls(r.estado)}">${r.estado}</span>` }], conCompra, { max: 200 })}</div>
+  </div>
+  <div class="sec">Stock recibido por SOLPED · gestión con el área solicitante</div>
+  <div class="card"><h3>Material ingresado en los últimos ${DR} días que sigue en almacén</h3><p class="note">Stock comprometido con la SOLPED que lo pidió: coordinar el retiro con el área y el solicitante. «En almacén» se estima con el stock actual de MB52 (libre + control de calidad), asignado primero al ingreso más reciente.</p>
+    <div class="tools"><span class="muted">${fN(recibidos.length)} posiciones · ${fS(sum(recibidos, 'valAlm'))}</span><span style="flex:1"></span><button class="btn" id="csvRec">Descargar CSV</button></div>
+    ${tabla([{ t: 'Área', k: 'area' }, { t: 'Solicitante', k: 'solicitante' }, { t: 'SOLPED', f: r => esc(r.solped) + '-' + r.pos }, { t: 'OC/OS', k: 'pedido' }, { t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Ingreso', k: 'fIngUlt' }, { t: 'Días en almacén', n: 1, f: r => fN(r.dAlm) }, { t: 'Ingresado', n: 1, f: r => fN(r.ingReciente) }, { t: 'En almacén', n: 1, f: r => `<b>${fN(r.enAlm)}</b>` }, { t: 'Valor aprox.', n: 1, f: r => fS(r.valAlm) }],
+      recibidos.slice().sort((a, b) => (a.area || '').localeCompare(b.area || '') || (b.dAlm || 0) - (a.dAlm || 0)), { max: 400 })}</div>
+  <div class="sec">Mapa de stock total por material</div>
+  <div class="card"><h3>Stock total, liberado o no</h3><p class="note">Libre = libre utilización (MB52) · Disponible = libre con más de ${DR} d · No liberado = control de calidad + bloqueado + traslado (si el layout de MB52 trae esas columnas). Áreas = quienes lo solicitaron o consumieron.</p>
+    <div class="tools"><input id="invQ" placeholder="Buscar material, texto o área…" value="${esc(INV.q)}"><span class="muted" id="invN"></span><span style="flex:1"></span><button class="btn" id="csvMapa">Descargar CSV</button></div>
+    <div id="invT"></div></div>`;
+  dibujarMapa();
+  $('#invQ').oninput = e => { INV.q = e.target.value.toLowerCase(); dibujarMapa(); };
+  const qcsv = v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  $('#csvRec').onclick = () => descargar('recibido_en_almacen_' + (area || 'todas') + '.csv', '\ufeffÁrea;Solicitante;SOLPED;Pos;OC/OS;Material;Texto;Fecha ingreso;Días en almacén;Ingresado;En almacén;Valor aprox. S/\n' +
+    INV.recibidos.map(r => [r.area, r.solicitante, r.solped, r.pos, r.pedido, r.material, r.texto, r.fIngUlt, r.dAlm, r.ingReciente, r.enAlm, Math.round(r.valAlm)].map(qcsv).join(';')).join('\n'), 'text/csv;charset=utf-8');
+  $('#csvMapa').onclick = () => descargar('stock_total_' + (area || 'todas') + '.csv', '\ufeffMaterial;Texto;UM;Áreas;Almacenes;Libre;Disponible;Reciente;Control calidad;Bloqueado;Traslado;Total;Valor total S/;Último ingreso;Último consumo\n' +
+    filasMapa().map(r => [r.material, r.texto, r.um, r.areas, r.almacenes, r.libre, r.disp, r.reciente, r.cal, r.bloq, r.trans, r.total, Math.round(r.valorTotal), r.ultIngreso, r.ultConsumo].map(qcsv).join(';')).join('\n'), 'text/csv;charset=utf-8');
   if (!conStock.length) { const c = document.getElementById('chCob'); if (c) c.parentElement.innerHTML = '<div class="empty">Ningún material con stock libre está vinculado a ' + esc(area || 'esta selección') + '.</div>'; }
   else grafico('chCob', { type: 'bar', data: { labels: buck.map(b => b[0]), datasets: [{ label: 'Valor', data: buck.map(b => Math.round(sum(conStock.filter(b[1]), 'valor'))), backgroundColor: ['#7a8597', '#d9a400', '#1f8a4c', '#e07b1a'] }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fS(c.raw) } } }, scales: { y: { ticks: { callback: v => fS(v) } } } } });
   const meses = [...new Set(cons.map(r => r.mes))].sort().slice(-18);
@@ -622,6 +662,19 @@ function pInv() {
   const sets = topA.map((a, i) => ({ label: a, backgroundColor: PAL[i], data: meses.map(m => Math.round(sum(cons.filter(r => r.mes === m && r.area === a), 'valorPEN'))) }));
   if (areas.length > 6) sets.push({ label: 'Otras', backgroundColor: '#c9ced8', data: meses.map(m => Math.round(sum(cons.filter(r => r.mes === m && !topA.includes(r.area)), 'valorPEN'))) });
   grafico('chCons', { type: 'bar', data: { labels: meses.map(mesTxt), datasets: sets }, options: { scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fS(v) } } }, plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fS(c.raw) } } } } });
+}
+
+function filasMapa() {
+  const q = INV.q;
+  return (INV.mapa || []).filter(r => !q || [r.material, r.texto, r.areas].some(v => String(v || '').toLowerCase().includes(q))).sort((a, b) => b.valorTotal - a.valorTotal);
+}
+function dibujarMapa() {
+  const a = filasMapa();
+  $('#invN').textContent = fN(a.length) + ' materiales · ' + fS(sum(a, 'valorTotal')) + (a.length > 300 ? ' · se muestran los 300 de mayor valor (el CSV trae todos)' : '');
+  const q = v => v ? fN(v) : '<span class="muted">—</span>';
+  $('#invT').innerHTML = tabla([{ t: 'Material', k: 'material' }, { t: 'Texto', k: 'texto' }, { t: 'Áreas', f: r => esc(r.areas) || '<span class="muted">sin vínculo</span>' }, { t: 'Almacenes', k: 'almacenes' },
+    { t: 'Libre', n: 1, f: r => q(r.libre) }, { t: 'Disponible', n: 1, f: r => q(r.disp) }, { t: 'Reciente', n: 1, f: r => q(r.reciente) }, { t: 'No liberado', n: 1, f: r => q((r.cal || 0) + (r.bloq || 0) + (r.trans || 0)) },
+    { t: 'Total', n: 1, f: r => `<b>${fN(r.total)}</b> ${esc(r.um)}` }, { t: 'Valor total', n: 1, f: r => fS(r.valorTotal) }, { t: 'Último ingreso', f: r => r.ultIngreso || '—' }], a, { max: 300 });
 }
 
 /* ============================ DETALLE ============================ */
